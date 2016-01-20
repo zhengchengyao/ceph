@@ -1,6 +1,7 @@
 set(client_srcs
   ceph-syn.rst
   ceph-conf.rst
+  ceph-crush-location.rst
   ceph.rst
   ceph-authtool.rst
   rados.rst

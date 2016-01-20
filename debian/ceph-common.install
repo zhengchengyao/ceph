@@ -20,6 +20,7 @@ usr/sbin/mount.ceph sbin
 usr/lib/ceph/compressor/*
 usr/share/man/man8/ceph-authtool.8
 usr/share/man/man8/ceph-conf.8
+usr/share/man/man8/ceph-crush-location.8
 usr/share/man/man8/ceph-dencoder.8
 usr/share/man/man8/ceph-rbdnamer.8
 usr/share/man/man8/ceph-syn.8
