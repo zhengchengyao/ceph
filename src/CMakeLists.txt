@@ -694,6 +694,7 @@ endif(WITH_TESTS)
 
 add_subdirectory(compressor)
 add_subdirectory(tools)
+add_subdirectory(dmclock) # after gmock
 
 if(WITH_TESTS)
 configure_file(${CMAKE_SOURCE_DIR}/src/ceph-coverage.in
