@@ -9316,7 +9316,10 @@ std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q) {
     out << "weightedpriority";
     break;
   case OSD::io_queue::mclock_opclass:
-    out << "mclock opclass";
+    out << "mclock_opclass";
+    break;
+  case OSD::io_queue::mclock_client:
+    out << "mclock_client";
     break;
   }
   return out;
