@@ -376,7 +376,8 @@ COMMAND("mds newfs " \
 COMMAND("fs new " \
 	"name=fs_name,type=CephString " \
 	"name=metadata,type=CephString " \
-	"name=data,type=CephString ", \
+	"name=data,type=CephString " \
+	"name=allow_overlay,type=CephChoices,strings=--allow-dangerous-metadata-overlay,req=false", \
 	"make new filesystem using named pools <metadata> and <data>", \
 	"fs", "rw", "cli,rest")
 COMMAND("fs rm " \
