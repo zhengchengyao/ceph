@@ -96,6 +96,9 @@ bool DataScan::parse_kwarg(
     }
     fscid = fs->fscid;
     return true;
+  } else if (arg == std::string("--alternate-pool")) {
+    metadata_pool_name = val;
+    return true;
   } else {
     return false;
   }
@@ -140,7 +143,6 @@ int DataScan::main(const std::vector<const char*> &args)
 
   std::string const &command = args[0];
   std::string data_pool_name;
-  std::string metadata_pool_name;
 
   // Consume any known --key val or --flag arguments
   for (std::vector<const char *>::const_iterator i = args.begin() + 1;
@@ -198,7 +200,7 @@ int DataScan::main(const std::vector<const char*> &args)
     return r;
   }
 
-  r = driver->init(rados, fsmap, fscid);
+  r = driver->init(rados, metadata_pool_name, fsmap, fscid);
   if (r < 0) {
     return r;
   }
@@ -247,7 +249,6 @@ int DataScan::main(const std::vector<const char*> &args)
     int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
-    std::string metadata_pool_name;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
     if (r < 0) {
       std::cerr << "Pool " << metadata_pool_id
@@ -452,6 +453,8 @@ int DataScan::scan_extents()
     uint64_t size;
     time_t mtime;
     int r = data_io.stat(oid, &size, &mtime);
+    dout(10) << "handling object " << obj_name_ino
+	     << "." << obj_name_offset << dendl;
     if (r != 0) {
       dout(4) << "Cannot stat '" << oid << "': skipping" << dendl;
       return r;
@@ -613,6 +616,10 @@ int DataScan::scan_inodes()
         uint64_t obj_name_offset) -> int
   {
     int r = 0;
+
+    dout(10) << "handling object "
+	     << std::hex << obj_name_ino << "." << obj_name_offset << std::dec
+	     << dendl;
 
     AccumulateResult accum_res;
     inode_backtrace_t backtrace;
@@ -1501,26 +1508,31 @@ int MetadataDriver::inject_linkage(
 
 
 int MetadataDriver::init(
-    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
+  librados::Rados &rados, std::string &metadata_pool_name, const FSMap *fsmap,
+  fs_cluster_id_t fscid)
 {
-  auto fs =  fsmap->get_filesystem(fscid);
-  assert(fs != nullptr);
-  int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
+  if (metadata_pool_name.empty()) {
+    auto fs =  fsmap->get_filesystem(fscid);
+    assert(fs != nullptr);
+    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
 
-  dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
-  std::string metadata_pool_name;
-  int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
-  if (r < 0) {
-    derr << "Pool " << metadata_pool_id
-      << " identified in MDS map not found in RADOS!" << dendl;
-    return r;
+    dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
+    int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
+    if (r < 0) {
+      derr << "Pool " << metadata_pool_id
+	   << " identified in MDS map not found in RADOS!" << dendl;
+      return r;
+    }
+    dout(4) << "found metadata pool '" << metadata_pool_name << "'" << dendl;
+  } else {
+    dout(4) << "forcing metadata pool '" << metadata_pool_name << "'" << dendl;
   }
-  dout(4) << "found metadata pool '" << metadata_pool_name << "'" << dendl;
   return rados.ioctx_create(metadata_pool_name.c_str(), metadata_io);
 }
 
 int LocalFileDriver::init(
-    librados::Rados &rados, const FSMap *fsmap, fs_cluster_id_t fscid)
+  librados::Rados &rados, std::string &metadata_pool_name, const FSMap *fsmap,
+  fs_cluster_id_t fscid)
 {
   return 0;
 }

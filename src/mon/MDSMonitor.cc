@@ -1611,13 +1611,25 @@ int MDSMonitor::management_command(
     for (auto fs : pending_fsmap.get_filesystems()) {
       const set<int64_t>& data_pools = fs.second->mds_map.get_data_pools();
       string sure;
-      if ((data_pools.find(data) != data_pools.end()
-	   || fs.second->mds_map.metadata_pool == metadata)
-	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
-	       || sure != "--allow-dangerous-metadata-overlay"))) {
-	ss << "Filesystem '" << fs_name
-	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
-	  return -EEXIST;
+      int r = 0;
+
+      if (data_pools.find(data) != data_pools.end()
+	  || fs.second->mds_map.metadata_pool == metadata) {
+	if (!fs.second->mds_map.up.empty()) {
+	  ss << "Filesystem '" << fs_name << "' is already using one of the specified RADOS pools with an active MDS. Set the cluster_down flag and fail any MDS serving this filesystem before continuing. ";
+	  r = -EINVAL;
+	}
+	if (!cmd_getval(g_ceph_context, cmdmap, "allow_overlay", sure)
+	    || sure != "--allow-dangerous-metadata-overlay") {
+	  ss << "Filesystem '" << fs_name
+	     << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay and to permit this.";
+	  r = -EEXIST;
+	}
+
+	if (r) {
+	  return r;
+	}
+
       }
     }
 

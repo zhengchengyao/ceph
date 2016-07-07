@@ -30,6 +30,7 @@ class RecoveryDriver {
   public:
     virtual int init(
         librados::Rados &rados,
+	std::string &metadata_pool_name,
         const FSMap *fsmap,
         fs_cluster_id_t fscid) = 0;
 
@@ -117,6 +118,7 @@ class LocalFileDriver : public RecoveryDriver
     // Implement RecoveryDriver interface
     int init(
         librados::Rados &rados,
+	std::string &metadata_pool_name,
         const FSMap *fsmap,
         fs_cluster_id_t fscid);
 
@@ -213,6 +215,7 @@ class MetadataDriver : public RecoveryDriver, public MetadataTool
     // Implement RecoveryDriver interface
     int init(
         librados::Rados &rados,
+	std::string &metadata_pool_name,
         const FSMap *fsmap,
         fs_cluster_id_t fscid);
 
@@ -239,6 +242,7 @@ class DataScan : public MDSUtility, public MetadataTool
     librados::IoCtx data_io;
     // Remember the data pool ID for use in layouts
     int64_t data_pool_id;
+    string metadata_pool_name;
 
     uint32_t n;
     uint32_t m;
@@ -306,7 +310,8 @@ class DataScan : public MDSUtility, public MetadataTool
     int main(const std::vector<const char *> &args);
 
     DataScan()
-      : driver(NULL), fscid(FS_CLUSTER_ID_NONE), data_pool_id(-1), n(0), m(1),
+      : driver(NULL), fscid(FS_CLUSTER_ID_NONE),
+	data_pool_id(-1), metadata_pool_name(""), n(0), m(1),
         force_pool(false), force_corrupt(false),
         force_init(false)
     {
