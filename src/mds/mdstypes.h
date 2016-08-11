@@ -182,7 +182,7 @@ struct frag_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const frag_info_t &cur, frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
+  void add_delta(const frag_info_t &cur, const frag_info_t &acc, bool *touched_mtime=0, bool *touched_chattr=0) {
     if (cur.mtime > mtime) {
       mtime = cur.mtime;
       if (touched_mtime)
@@ -255,7 +255,7 @@ struct nest_info_t : public scatter_info_t {
   }
 
   // *this += cur - acc;
-  void add_delta(const nest_info_t &cur, nest_info_t &acc) {
+  void add_delta(const nest_info_t &cur, const nest_info_t &acc) {
     if (cur.rctime > rctime)
       rctime = cur.rctime;
     rbytes += cur.rbytes - acc.rbytes;
