@@ -36,6 +36,7 @@
 #include "json_spirit/json_spirit_reader.h"
 
 #include "include/rados/librados.hpp"
+#include "tools/rebuild_mondb.h"
 
 namespace po = boost::program_options;
 using namespace std;
@@ -3077,7 +3078,8 @@ int mydump_journal(Formatter *f, string journalpath, bool m_journal_dio)
 
 int main(int argc, char **argv)
 {
-  string dpath, jpath, pgidstr, op, file, object, objcmd, arg1, arg2, type, format;
+  string dpath, jpath, pgidstr, op, file, mon_store_path, object;
+  string objcmd, arg1, arg2, type, format;
   spg_t pgid;
   unsigned epoch = 0;
   ghobject_t ghobj;
@@ -3099,11 +3101,13 @@ int main(int argc, char **argv)
      "PG id, mandatory for info, log, remove, export, rm-past-intervals, mark-complete")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, export, import, list, fix-lost, list-pgs, rm-past-intervals, set-allow-sharded-objects, dump-journal, dump-super, meta-list, "
-	 "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, update-mon-db]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
      "path of file to export, import, get-osdmap, set-osdmap, get-inc-osdmap or set-inc-osdmap")
+    ("mon-store-path", po::value<string>(&mon_store_path),
+     "path of monstore to update-mon-db")
     ("format", po::value<string>(&format)->default_value("json-pretty"),
      "Output format which may be json, json-pretty, xml, xml-pretty")
     ("debug", "Enable diagnostic output to stderr")
@@ -3704,6 +3708,13 @@ int main(int argc, char **argv)
       goto out;
     } else {
       ret = set_inc_osdmap(fs, epoch, bl, force);
+    }
+    goto out;
+  } else if (op == "update-mon-db") {
+    if (!vm.count("mon-store-path")) {
+      cerr << "Please specify the path to monitor db to update" << std::endl;
+    } else {
+      ret = update_mon_db(*fs, superblock, dpath + "/keyring", mon_store_path);
     }
     goto out;
   }
