@@ -706,6 +706,8 @@ OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict que
 OPTION(osd_op_queue_mclock_cost_factor, OPT_INT, 10) // increases weighted queue tag by this amount multiplied by log_2(cost)
 
 // mClock priority queue parameters for five types of ops
+OPTION(osd_op_queue_mclock_allow_limit_break, OPT_BOOL, true)
+
 OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE, 1000.0)
 OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE, 500.0)
 OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE, 0.0)

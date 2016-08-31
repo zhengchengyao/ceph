@@ -19,6 +19,9 @@
 #include <map>
 #include <list>
 #include <cmath>
+#include <iostream>
+
+#include "common/dout.h"
 
 #include "common/Formatter.h"
 #include "common/OpQueue.h"
@@ -28,6 +31,13 @@
 // the following is done to unclobber _ASSERT_H so it returns to the
 // way ceph likes it
 #include "include/assert.h"
+
+
+#ifndef dout_subsys
+#define dout_subsys ceph_subsys_osd
+#undef dout_prefix
+#define dout_prefix *_dout
+#endif
 
 
 namespace ceph {
@@ -217,12 +227,16 @@ namespace ceph {
     // list from which we dequeue items first, and only when it's
     // empty do we use queue.
     std::list<std::pair<K,T>> queue_front;
+    CephContext *cct;
 
   public:
 
     mClockQueue(
-      const typename dmc::PullPriorityQueue<K,T>::ClientInfoFunc& info_func) :
-      queue(info_func, true)
+      CephContext *_cct,
+      const typename dmc::PullPriorityQueue<K,T>::ClientInfoFunc& info_func,
+      bool allow_limit_break) :
+      queue(info_func, allow_limit_break),
+      cct(_cct)
     {
       // empty
     }

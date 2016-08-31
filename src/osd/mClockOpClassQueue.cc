@@ -22,9 +22,11 @@
 namespace dmc = crimson::dmclock;
 
 
+#ifndef dout_subsys
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix *_dout
+#endif
 
 
 namespace ceph {
@@ -87,7 +89,9 @@ namespace ceph {
   mClockOpClassQueue::pg_queueable_visitor;
 
   mClockOpClassQueue::mClockOpClassQueue(CephContext *cct) :
-    queue(&mClockOpClassQueue::op_class_client_info_f),
+    queue(cct,
+	  &mClockOpClassQueue::op_class_client_info_f,
+	  cct->_conf->osd_op_queue_mclock_allow_limit_break),
     cost_factor(cct->_conf->osd_op_queue_mclock_cost_factor)
   {
     // manage the singleton
