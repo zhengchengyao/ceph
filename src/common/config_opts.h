@@ -167,7 +167,7 @@ OPTION(heartbeat_file, OPT_STR, "")
 OPTION(heartbeat_inject_failure, OPT_INT, 0)    // force an unhealthy heartbeat for N seconds
 OPTION(perf, OPT_BOOL, true)       // enable internal perf counters
 
-OPTION(ms_type, OPT_STR, "simple")   // messenger backend
+OPTION(ms_type, OPT_STR, "async")   // messenger backend
 OPTION(ms_tcp_nodelay, OPT_BOOL, true)
 OPTION(ms_tcp_rcvbuf, OPT_INT, 0)
 OPTION(ms_tcp_prefetch_max_size, OPT_INT, 4096) // max prefetch size, we limit this to avoid extra memcpy
@@ -698,16 +698,16 @@ OPTION(osd_recovery_threads, OPT_INT, 1)
 OPTION(osd_recover_clone_overlap, OPT_BOOL, true)   // preserve clone_overlap during recovery/migration
 OPTION(osd_op_num_threads_per_shard, OPT_INT, 2)
 OPTION(osd_op_num_shards, OPT_INT, 5)
-OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), mclock_opclass, or debug_random
+OPTION(osd_op_queue, OPT_STR, "wpq") // PrioritzedQueue (prio), Weighted Priority Queue (wpq), mclock_opclass, mclock_client, or debug_random
 OPTION(osd_op_queue_cut_off, OPT_STR, "low") // Min priority to go to strict queue. (low, high, debug_random)
 
 // mclock specific parameters
 
 OPTION(osd_op_queue_mclock_cost_factor, OPT_INT, 10) // increases weighted queue tag by this amount multiplied by log_2(cost)
 
-// mClock priority queue parameters for five types of ops
 OPTION(osd_op_queue_mclock_allow_limit_break, OPT_BOOL, true)
 
+// mClock priority queue parameters for five types of ops
 OPTION(osd_op_queue_mclock_client_op_res, OPT_DOUBLE, 1000.0)
 OPTION(osd_op_queue_mclock_client_op_wgt, OPT_DOUBLE, 500.0)
 OPTION(osd_op_queue_mclock_client_op_lim, OPT_DOUBLE, 0.0)
@@ -1016,6 +1016,7 @@ OPTION(bluestore_bitmapallocator_span_size, OPT_INT, 1024) // must be power of 2
 OPTION(bluestore_rocksdb_options, OPT_STR, "compression=kNoCompression,max_write_buffer_number=16,min_write_buffer_number_to_merge=3,recycle_log_file_num=16")
 OPTION(bluestore_fsck_on_mount, OPT_BOOL, false)
 OPTION(bluestore_fsck_on_umount, OPT_BOOL, false)
+OPTION(bluestore_fsck_on_mkfs, OPT_BOOL, true)
 OPTION(bluestore_sync_transaction, OPT_BOOL, false)  // perform kv txn synchronously
 OPTION(bluestore_sync_submit_transaction, OPT_BOOL, false)
 OPTION(bluestore_sync_wal_apply, OPT_BOOL, true)     // perform initial wal work synchronously (possibly in combination with aio so we only *queue* ios)
@@ -1355,6 +1356,8 @@ OPTION(rgw_keystone_token_cache_size, OPT_INT, 10000)  // max number of entries 
 OPTION(rgw_keystone_revocation_interval, OPT_INT, 15 * 60)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL, true) // should we try to verify keystone's ssl
 OPTION(rgw_keystone_implicit_tenants, OPT_BOOL, false)  // create new users in their own tenants of the same name
+OPTION(rgw_cross_domain_policy, OPT_STR, "<allow-access-from domain=\"*\" secure=\"false\" />")
+OPTION(rgw_healthcheck_disabling_path, OPT_STR, "") // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL, true)  // should we try to use the internal credentials for s3?
 OPTION(rgw_s3_auth_use_keystone, OPT_BOOL, false)  // should we try to use keystone for s3?
 
@@ -1396,6 +1399,9 @@ OPTION(rgw_nfs_lru_lanes, OPT_INT, 5)
 OPTION(rgw_nfs_lru_lane_hiwat, OPT_INT, 911)
 OPTION(rgw_nfs_fhcache_partitions, OPT_INT, 3)
 OPTION(rgw_nfs_fhcache_size, OPT_INT, 2017) /* 3*2017=6051 */
+OPTION(rgw_nfs_write_completion_interval_s, OPT_INT, 10) /* stateless (V3)
+							  * commit
+							  * delay */
 
 OPTION(rgw_zone, OPT_STR, "") // zone name
 OPTION(rgw_zone_root_pool, OPT_STR, ".rgw.root")    // pool where zone specific info is stored
