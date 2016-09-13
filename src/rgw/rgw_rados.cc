@@ -7346,7 +7346,17 @@ int RGWRados::delete_bucket(rgw_bucket& bucket, RGWObjVersionTracker& objv_track
 
     /* Return ENOTEMPTY if we find any kind of object inside the bucket */
     if (ent_map.size() != 0) {
-      return -ENOTEMPTY;
+
+		/* XXXXX dump data */
+		ldout(cct, 0) << "gonzo failed deleting non-empty bucket "
+					  << bucket << dendl;
+		std::map<string, RGWObjEnt>::iterator eiter;
+		for (eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
+			rgw_obj_key obj = eiter->second.key;
+			ldout(cct, 0) << " object named " << obj.name << dendl;
+		}
+
+		return -ENOTEMPTY;
     }
   } while (is_truncated);
 
