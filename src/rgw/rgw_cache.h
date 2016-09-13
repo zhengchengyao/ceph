@@ -270,7 +270,7 @@ int RGWCache<T>::delete_system_obj(rgw_obj& obj, RGWObjVersionTracker *objv_trac
   string oid;
   normalize_bucket_and_obj(obj.bucket, obj.get_object(), bucket, oid);
 
-  string name = normal_name(obj);
+  string name = normal_name(bucket, oid);
   cache.remove(name);
 
   ObjectCacheInfo info;
@@ -292,7 +292,7 @@ int RGWCache<T>::get_system_obj(RGWObjectCtx& obj_ctx, RGWRados::SystemObject::R
   if (ofs != 0)
     return T::get_system_obj(obj_ctx, read_state, objv_tracker, obj, obl, ofs, end, attrs, cache_info);
 
-  string name = normal_name(obj.bucket, oid);
+  string name = normal_name(bucket, oid);
 
   ObjectCacheInfo info;
 
