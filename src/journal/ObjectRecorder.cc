@@ -41,6 +41,7 @@ ObjectRecorder::~ObjectRecorder() {
   assert(m_append_buffers.empty());
   assert(m_in_flight_tids.empty());
   assert(m_in_flight_appends.empty());
+  assert(!m_aio_scheduled);
 }
 
 bool ObjectRecorder::append_unlock(const AppendBuffers &append_buffers) {
@@ -269,7 +270,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
       }
 
       // notify of overflow once all in-flight ops are complete
-      if (m_in_flight_tids.empty()) {
+      if (m_in_flight_tids.empty() && !m_aio_scheduled) {
         notify_handler();
       }
       return;
@@ -280,7 +281,7 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
     assert(!append_buffers.empty());
 
     m_in_flight_appends.erase(iter);
-    if (m_in_flight_appends.empty() && m_object_closed) {
+    if (m_in_flight_appends.empty() && !m_aio_scheduled && m_object_closed) {
       // all remaining unsent appends should be redirected to new object
       notify_handler();
     }
