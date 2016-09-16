@@ -59,7 +59,8 @@ namespace ceph {
 
   dmc::ClientInfo
   mClockClientQueue::op_class_client_info_f(
-    const mClockClientQueue::InnerClient& client) {
+    const mClockClientQueue::InnerClient& client)
+  {
     switch(client.second) {
     case osd_op_type_t::client_op:
       return mclock_op_tags->client_op;
@@ -127,4 +128,44 @@ namespace ceph {
     queue.dump(f);
   }
 
+
+  inline void mClockClientQueue::enqueue_strict(Client cl,
+						unsigned priority,
+						Request item) {
+    queue.enqueue_strict(get_inner_client(cl, item), 0, item);
+    dout(0) << "enqueue_strict: " << item << dendl;
+  }
+
+  // Enqueue op in the front of the strict queue
+  inline void mClockClientQueue::enqueue_strict_front(Client cl,
+						      unsigned priority,
+						      Request item) {
+    queue.enqueue_strict_front(get_inner_client(cl, item), priority, item);
+    dout(0) << "enqueue_strict_front: " << item << dendl;
+  }
+
+  // Enqueue op in the back of the regular queue
+  inline void mClockClientQueue::enqueue(Client cl,
+					 unsigned priority,
+					 unsigned cost,
+					 Request item) {
+    queue.enqueue(get_inner_client(cl, item), priority, cost, item);
+    dout(0) << "enqueue: " << item << dendl;
+  }
+
+  // Enqueue the op in the front of the regular queue
+  inline void mClockClientQueue::enqueue_front(Client cl,
+					       unsigned priority,
+					       unsigned cost,
+					       Request item) {
+    queue.enqueue_front(get_inner_client(cl, item), priority, cost, item);
+    dout(0) << "enqueue_front: " << item << dendl;
+  }
+
+  // Return an op to be dispatch
+  inline Request mClockClientQueue::dequeue() {
+    Request result = queue.dequeue();
+    dout(0) << "dequeue: " << result.second << dendl;
+    return result;
+  }
 } // namespace ceph
