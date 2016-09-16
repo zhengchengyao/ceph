@@ -9308,3 +9308,31 @@ std::ostream& operator<<(std::ostream& out, const OSD::io_queue& q) {
   }
   return out;
 }
+
+
+OSD::io_queue OSD::get_io_queue() const {
+  if (cct->_conf->osd_op_queue == "debug_random") {
+#if 0
+    static io_queue index_lookup[] = { OSD::io_queue::prioritized,
+				       OSD::io_queue::weightedpriority,
+				       OSD::io_queue::mclock_opclass,
+				       OSD::io_queue::mclock_client };
+    srand(time(NULL));
+    unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
+    return index_lookup[which];
+#else
+    dout(0) << "WARNING: debug_random io_queue being forced to "
+      "mclock_client for debugging purposes" <<
+      dendl;
+    return OSD::io_queue::mclock_client;
+#endif
+  } else if (cct->_conf->osd_op_queue == "wpq") {
+    return OSD::io_queue::weightedpriority;
+  } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
+    return OSD::io_queue::mclock_opclass;
+  } else if (cct->_conf->osd_op_queue == "mclock_client") {
+    return OSD::io_queue::mclock_client;
+  } else {
+    return OSD::io_queue::prioritized;
+  }
+}

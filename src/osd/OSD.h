@@ -2323,25 +2323,7 @@ protected:
   bool ms_handle_reset(Connection *con);
   void ms_handle_remote_reset(Connection *con) {}
 
-  io_queue get_io_queue() const {
-    if (cct->_conf->osd_op_queue == "debug_random") {
-      static io_queue index_lookup[] = { io_queue::prioritized,
-					 io_queue::weightedpriority,
-					 io_queue::mclock_opclass,
-					 io_queue::mclock_client };
-      srand(time(NULL));
-      unsigned which = rand() % (sizeof(index_lookup) / sizeof(index_lookup[0]));
-      return index_lookup[which];
-    } else if (cct->_conf->osd_op_queue == "wpq") {
-      return io_queue::weightedpriority;
-    } else if (cct->_conf->osd_op_queue == "mclock_opclass") {
-      return io_queue::mclock_opclass;
-    } else if (cct->_conf->osd_op_queue == "mclock_client") {
-      return io_queue::mclock_client;
-    } else {
-      return io_queue::prioritized;
-    }
-  }
+  io_queue get_io_queue() const;
 
   unsigned int get_io_prio_cut() const {
     if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
