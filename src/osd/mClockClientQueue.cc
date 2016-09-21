@@ -133,7 +133,8 @@ namespace ceph {
 						unsigned priority,
 						Request item) {
     queue.enqueue_strict(get_inner_client(cl, item), 0, item);
-    dout(0) << "enqueue_strict: " << item << dendl;
+    dout(0) << "enqueue_strict:( priority:" << priority << " " <<
+      item << " )" << dendl;
   }
 
   // Enqueue op in the front of the strict queue
@@ -141,7 +142,8 @@ namespace ceph {
 						      unsigned priority,
 						      Request item) {
     queue.enqueue_strict_front(get_inner_client(cl, item), priority, item);
-    dout(0) << "enqueue_strict_front: " << item << dendl;
+    dout(0) << "enqueue_strict_front:( priority:" << priority << " " <<
+      item << " )" << dendl;
   }
 
   // Enqueue op in the back of the regular queue
@@ -150,7 +152,8 @@ namespace ceph {
 					 unsigned cost,
 					 Request item) {
     queue.enqueue(get_inner_client(cl, item), priority, cost, item);
-    dout(0) << "enqueue: " << item << dendl;
+    dout(0) << "enqueue:( priority:" << priority <<
+      ", cost:" << cost << " " << item << " )" << dendl;
   }
 
   // Enqueue the op in the front of the regular queue
@@ -159,13 +162,20 @@ namespace ceph {
 					       unsigned cost,
 					       Request item) {
     queue.enqueue_front(get_inner_client(cl, item), priority, cost, item);
-    dout(0) << "enqueue_front: " << item << dendl;
+    dout(0) << "enqueue_front:( priority:" << priority <<
+      ", cost:" << cost << " " << item << " )" << dendl;
   }
 
   // Return an op to be dispatch
   inline Request mClockClientQueue::dequeue() {
     Request result = queue.dequeue();
-    dout(0) << "dequeue: " << result.second << dendl;
+    dout(0) << "dequeue:( " << result << " )" << dendl;
     return result;
+  }
+
+  std::ostream& operator<<(std::ostream& out, const Request& req) {
+    out << "request:{ pg:" << req.first->info.pgid << ", " <<
+      req.second << " }";
+    return out;
   }
 } // namespace ceph
