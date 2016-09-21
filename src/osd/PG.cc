@@ -1949,7 +1949,9 @@ void PG::replay_queued_ops()
   }
   replay_queue.clear();
   if (is_active()) {
+      dout(0) << "PG::replay_queued_ops calling requeue_ops(replay)" << dendl;
     requeue_ops(replay);
+      dout(0) << "PG::replay_queued_ops calling requeue_ops(waiting_for_active)" << dendl;
     requeue_ops(waiting_for_active);
     assert(waiting_for_peered.empty());
   } else {
@@ -1995,6 +1997,7 @@ void PG::_activate_committed(epoch_t epoch, epoch_t activation_epoch)
 
     // waiters
     if (flushes_in_progress == 0) {
+      dout(0) << "PG::_activate_committed calling requeue_ops(waiting_for_peered)" << dendl;
       requeue_ops(waiting_for_peered);
     }
   }
@@ -3252,13 +3255,16 @@ void PG::requeue_object_waiters(map<hobject_t, list<OpRequestRef>, hobject_t::Bi
 {
   for (map<hobject_t, list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator it = m.begin();
        it != m.end();
-       ++it)
+       ++it) {
+    dout(0) << "PG::requeue_object_waiters calling requeue_ops(it->second)" << dendl;
     requeue_ops(it->second);
+  }
   m.clear();
 }
 
 void PG::requeue_op(OpRequestRef op)
 {
+  dout(15) << " requeue_op " << op << dendl;
   osd->op_wq.queue_front(make_pair(PGRef(this), PGQueueable(op)));
 }
 
@@ -4217,6 +4223,7 @@ void PG::chunky_scrub(ThreadPool::TPHandle &handle)
 	scrubber.run_callbacks();
 
         // requeue the writes from the chunk that just finished
+	dout(0) << "PG::chunky_scrub calling requeue_ops(waiting_for_active)" << dendl;
         requeue_ops(waiting_for_active);
 
 	scrubber.state = PG::Scrubber::WAIT_DIGEST_UPDATES;
@@ -4267,6 +4274,7 @@ void PG::scrub_clear_state()
   if (scrubber.active)
     osd->dec_scrubs_active();
 
+  dout(0) << "PG::scrub_clear_state calling requeue_ops(waiting_for_active)" << dendl;
   requeue_ops(waiting_for_active);
 
   if (scrubber.queue_snap_trim) {
@@ -5031,12 +5039,14 @@ void PG::start_peering_interval(
 	   ++it)
 	ls.push_back(it->second);
       replay_queue.clear();
+      dout(0) << "PG::start_peering_interval calling requeue_ops(ls)" << dendl;
       requeue_ops(ls);
     }
 
     on_role_change();
 
     // take active waiters
+    dout(0) << "PG::start_peering_interval calling requeue_ops(waiting_for_peered)" << dendl;
     requeue_ops(waiting_for_peered);
 
   } else {
@@ -5147,6 +5157,13 @@ void PG::proc_primary_info(ObjectStore::Transaction &t, const pg_info_t &oinfo)
     dirty_big_info = true;
   }
 }
+
+
+std::ostream& operator<<(std::ostream& out, const PGRef& pg_ref) {
+  out << *pg_ref.get();
+  return out;
+}
+
 
 ostream& operator<<(ostream& out, const PG& pg)
 {
@@ -6865,6 +6882,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
 
   // waiters
   if (pg->flushes_in_progress == 0) {
+    dout(0) << "PG::RecoveryState::Active::react calling requeue_ops(pg->waiting_for_peered)" << dendl;
     pg->requeue_ops(pg->waiting_for_peered);
   }
 

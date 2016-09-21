@@ -162,6 +162,38 @@ public:
 // ======================
 // PGBackend::Listener
 
+void ReplicatedPG::release_object_locks(ObcLockManager &lock_manager) {
+  list<pair<hobject_t, list<OpRequestRef> > > to_req;
+  bool requeue_recovery = false;
+  bool requeue_snaptrim = false;
+  lock_manager.put_locks(
+    &to_req,
+    &requeue_recovery,
+    &requeue_snaptrim);
+  if (requeue_recovery)
+    queue_recovery();
+  if (requeue_snaptrim)
+    queue_snap_trim();
+
+  if (!to_req.empty()) {
+    // requeue at front of scrub blocking queue if we are blocked by scrub
+    for (auto &&p: to_req) {
+      if (scrubber.write_blocked_by_scrub(
+	    p.first.get_head(),
+	    get_sort_bitwise())) {
+	waiting_for_active.splice(
+	  waiting_for_active.begin(),
+	  p.second,
+	  p.second.begin(),
+	  p.second.end());
+      } else {
+	dout(0) << "ReplicatedPG::release_object_locks calling requeue_ops(p.second)" << dendl;
+	requeue_ops(p.second);
+      }
+    }
+  }
+}
+
 void ReplicatedPG::on_local_recover(
   const hobject_t &hoid,
   const ObjectRecoveryInfo &_recovery_info,
@@ -237,6 +269,7 @@ void ReplicatedPG::on_local_recover(
       waiting_for_unreadable_object.erase(hoid);
     }
     if (pg_log.get_missing().get_items().size() == 0) {
+      dout(0) << "ReplicatedPG::on_local_recover calling requeue_ops(waiting_for_all_missing)" << dendl;
       requeue_ops(waiting_for_all_missing);
       waiting_for_all_missing.clear();
     }
@@ -274,6 +307,7 @@ void ReplicatedPG::on_global_recover(
   assert(i->second);
   list<OpRequestRef> requeue_list;
   i->second->drop_recovery_read(&requeue_list);
+  dout(0) << "ReplicatedPG::on_global_recover calling requeue_ops(requeue_list)" << dendl;
   requeue_ops(requeue_list);
 
   if (backfills_in_flight.count(soid))
@@ -8321,8 +8355,8 @@ void ReplicatedPG::cancel_flush(FlushOpRef fop, bool requeue)
     kick_object_context_blocked(fop->obc);
   }
   if (requeue) {
-    if (fop->op)
-      requeue_op(fop->op);
+    if (fop->op) requeue_op(fop->op);
+    dout(0) << "ReplicatedPG::cancel_flush calling requeue_ops(fop->dup_ops)" << dendl;
     requeue_ops(fop->dup_ops);
   }
   if (fop->on_flush) {
@@ -9960,6 +9994,7 @@ void ReplicatedPG::apply_and_flush_repops(bool requeue)
   assert(repop_queue.empty());
 
   if (requeue) {
+    dout(0) << "ReplicatedPG::apply_and_flush_repops calling requeue_ops(rq)" << dendl;
     requeue_ops(rq);
     if (!waiting_for_ondisk.empty()) {
       for (map<eversion_t, list<pair<OpRequestRef, version_t> > >::iterator i =
@@ -9987,6 +10022,7 @@ void ReplicatedPG::on_flushed()
   assert(flushes_in_progress > 0);
   flushes_in_progress--;
   if (flushes_in_progress == 0) {
+    dout(0) << "ReplicatedPG::on_flushed calling requeue_ops(waiting_for_peered)" << dendl;
     requeue_ops(waiting_for_peered);
   }
   if (!is_peered() || !is_primary()) {
@@ -10129,6 +10165,7 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
 
   // requeue everything in the reverse order they should be
   // reexamined.
+  dout(0) << "ReplicatedPG::on_change-A calling requeue_ops(waiting_for_peered)" << dendl;
   requeue_ops(waiting_for_peered);
 
   clear_scrub_reserved();
@@ -10149,19 +10186,23 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_degraded_object.begin();
        p != waiting_for_degraded_object.end();
        waiting_for_degraded_object.erase(p++)) {
-    if (is_primary())
+    if (is_primary()) {
+      dout(0) << "ReplicatedPG::on_change-B calling requeue_ops(p->second)" << dendl;
       requeue_ops(p->second);
-    else
+    } else {
       p->second.clear();
+    }
     finish_degraded_object(p->first);
   }
   for (map<hobject_t,list<OpRequestRef>, hobject_t::BitwiseComparator>::iterator p = waiting_for_blocked_object.begin();
        p != waiting_for_blocked_object.end();
        waiting_for_blocked_object.erase(p++)) {
-    if (is_primary())
+    if (is_primary()) {
+      dout(0) << "ReplicatedPG::on_change-C calling requeue_ops(p->second)" << dendl;
       requeue_ops(p->second);
-    else
+    } else {
       p->second.clear();
+    }
   }
   for (map<hobject_t, list<Context*>, hobject_t::BitwiseComparator>::iterator i =
 	 callbacks_for_degraded_object.begin();
@@ -10172,7 +10213,9 @@ void ReplicatedPG::on_change(ObjectStore::Transaction *t)
   assert(callbacks_for_degraded_object.empty());
 
   if (is_primary()) {
+      dout(0) << "ReplicatedPG::on_change-D calling requeue_ops(waiting_for_cache_not_full)" << dendl;
     requeue_ops(waiting_for_cache_not_full);
+      dout(0) << "ReplicatedPG::on_change-E calling requeue_ops(waiting_for_cache_not_full)" << dendl;
     requeue_ops(waiting_for_all_missing);
   } else {
     waiting_for_cache_not_full.clear();
@@ -10265,6 +10308,7 @@ void ReplicatedPG::_clear_recovery_state()
        recovering.erase(i++)) {
     if (i->second) {
       i->second->drop_recovery_read(&blocked_ops);
+      dout(0) << "ReplicatedPG::_clear_recovery_state calling requeue_ops(blocked_ops)" << dendl;
       requeue_ops(blocked_ops);
     }
   }
@@ -10282,6 +10326,7 @@ void ReplicatedPG::cancel_pull(const hobject_t &soid)
   if (obc) {
     list<OpRequestRef> blocked_ops;
     obc->drop_recovery_read(&blocked_ops);
+    dout(0) << "ReplicatedPG::cancel_pull calling requeue_ops(blocked_ops)" << dendl;
     requeue_ops(blocked_ops);
   }
   recovering.erase(soid);
@@ -13290,6 +13335,7 @@ int ReplicatedPG::getattrs_maybe_cache(
   }
   return r;
 }
+
 
 void intrusive_ptr_add_ref(ReplicatedPG *pg) { pg->get("intptr"); }
 void intrusive_ptr_release(ReplicatedPG *pg) { pg->put("intptr"); }

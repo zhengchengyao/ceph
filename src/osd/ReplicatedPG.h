@@ -847,37 +847,7 @@ protected:
    *
    * @param manager [in] manager with locks to release
    */
-  void release_object_locks(
-    ObcLockManager &lock_manager) {
-    list<pair<hobject_t, list<OpRequestRef> > > to_req;
-    bool requeue_recovery = false;
-    bool requeue_snaptrim = false;
-    lock_manager.put_locks(
-      &to_req,
-      &requeue_recovery,
-      &requeue_snaptrim);
-    if (requeue_recovery)
-      queue_recovery();
-    if (requeue_snaptrim)
-      queue_snap_trim();
-
-    if (!to_req.empty()) {
-      // requeue at front of scrub blocking queue if we are blocked by scrub
-      for (auto &&p: to_req) {
-	if (scrubber.write_blocked_by_scrub(
-	      p.first.get_head(),
-	      get_sort_bitwise())) {
-	  waiting_for_active.splice(
-	    waiting_for_active.begin(),
-	    p.second,
-	    p.second.begin(),
-	    p.second.end());
-	} else {
-	  requeue_ops(p.second);
-	}
-      }
-    }
-  }
+  void release_object_locks(ObcLockManager &lock_manager);
 
   // replica ops
   // [primary|tail]

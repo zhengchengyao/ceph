@@ -2415,6 +2415,8 @@ public:
 
 ostream& operator<<(ostream& out, const PG& pg);
 
+std::ostream& operator<<(std::ostream&, const PGRef&);
+
 ostream& operator<<(ostream& out, const PG::BackfillInterval& bi);
 
 #endif
