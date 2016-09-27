@@ -339,10 +339,18 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
       return strict.size + normal.size;
     }
     void remove_by_filter(std::function<bool (const T&)> f) override final {
+      // TODO: test the reversal of these two (normal before strict)
+      // since presumably we should visit lower priority before higher
+      // priority; it likely works as the strict threshold doesn't
+      // change, but if it ever could that would be important
       strict.filter_list_pairs(f);
       normal.filter_list_pairs(f);
     }
     void remove_by_class(K cl, std::list<T>* removed = 0) override final {
+      // TODO: test the reversal of these two (normal before strict)
+      // since presumably we should visit lower priority before higher
+      // priority; it likely works as the strict threshold doesn't
+      // change, but if it ever could that would be important
       strict.filter_class(cl, removed);
       normal.filter_class(cl, removed);
     }
