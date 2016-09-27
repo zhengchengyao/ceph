@@ -350,7 +350,8 @@ bool PG::proc_replica_info(
   pg_shard_t from, const pg_info_t &oinfo, epoch_t send_epoch)
 {
   map<pg_shard_t, pg_info_t>::iterator p = peer_info.find(from);
-  if (p != peer_info.end() && p->second.last_update == oinfo.last_update) {
+  if (p != peer_info.end() && p->second.last_update == oinfo.last_update &&
+      p->second.last_epoch_started == oinfo.last_epoch_started) {
     dout(10) << " got dup osd." << from << " info " << oinfo << ", identical to ours" << dendl;
     return false;
   }
@@ -927,7 +928,7 @@ void PG::build_prior(std::unique_ptr<PriorSet> &prior_set)
   set_probe_targets(prior_set->probe);
 }
 
-void PG::clear_primary_state()
+void PG::clear_primary_state(const bool full)
 {
   dout(10) << "clear_primary_state" << dendl;
 
@@ -935,14 +936,17 @@ void PG::clear_primary_state()
   stray_set.clear();
   peer_log_requested.clear();
   peer_missing_requested.clear();
-  peer_info.clear();
-  peer_missing.clear();
   need_up_thru = false;
   peer_last_complete_ondisk.clear();
   peer_activated.clear();
   min_last_complete_ondisk = eversion_t();
   pg_trim_to = eversion_t();
   might_have_unfound.clear();
+
+  if (full) {
+    peer_info.clear();
+    peer_missing.clear();
+  }
 
   last_update_ondisk = eversion_t();
 
@@ -5031,9 +5035,15 @@ void PG::start_peering_interval(
   if (was_old_primary || is_primary()) {
     osd->remove_want_pg_temp(info.pgid.pgid);
   }
-  clear_primary_state();
 
-    
+  // don't clear the state if we are primary and were primary during the last
+  // interval so we can reuse it
+  if (!(was_old_primary && is_primary())) {
+    clear_primary_state(false);
+  } else {
+    clear_primary_state(true);
+  }
+
   // pg->on_*
   on_change(t);
 
@@ -5895,7 +5905,8 @@ boost::statechart::result PG::RecoveryState::Primary::react(const MNotifyRec& no
   dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
+      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update &&
+      pg->peer_info[notevt.from].last_epoch_started == notevt.notify.info.last_epoch_started) {
     dout(10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
 	     << ", identical to ours" << dendl;
   } else {
@@ -5921,7 +5932,6 @@ void PG::RecoveryState::Primary::exit()
   pg->want_acting.clear();
   utime_t dur = ceph_clock_now(pg->cct) - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_primary_latency, dur);
-  pg->clear_primary_state();
   pg->state_clear(PG_STATE_CREATING);
 }
 
@@ -7551,7 +7561,8 @@ boost::statechart::result PG::RecoveryState::Incomplete::react(const MNotifyRec&
   dout(7) << "handle_pg_notify from osd." << notevt.from << dendl;
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->peer_info.count(notevt.from) &&
-      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update) {
+      pg->peer_info[notevt.from].last_update == notevt.notify.info.last_update &&
+      pg->peer_info[notevt.from].last_epoch_started == notevt.notify.info.last_epoch_started) {
     dout(10) << *pg << " got dup osd." << notevt.from << " info " << notevt.notify.info
 	     << ", identical to ours" << dendl;
     return discard_event();
