@@ -905,7 +905,6 @@ void MDCache::request_kill(const MDRequestRef& mdr)
     dout(10) << "request_kill " << *mdr << dendl;
     request_cleanup(mdr);
   }
-  mdr->dispatch_mutex.Unlock();
 }
 
 void MDCache::lock_parents_for_linkunlink(const MDRequestRef& mdr, CInode *in,
