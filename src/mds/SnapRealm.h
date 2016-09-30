@@ -94,7 +94,6 @@ struct SnapRealm {
   const bufferlist& get_snap_trace();
   void build_snap_trace(bufferlist& snapbl);
 
-  const string& get_snapname(snapid_t snapid, inodeno_t atino);
   snapid_t resolve_snapname(const string &name, inodeno_t atino, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   void check_cache();

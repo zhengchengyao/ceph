@@ -330,28 +330,6 @@ void SnapRealm::get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first, 
     parent->get_snap_info(infomap, MAX(first, srnode.current_parent_since), last);
 }
 
-const string& SnapRealm::get_snapname(snapid_t snapid, inodeno_t atino)
-{
-  if (srnode.snaps.count(snapid)) {
-    if (atino == inode->ino())
-      return srnode.snaps[snapid].name;
-    else
-      return srnode.snaps[snapid].get_long_name();
-  }
-
-  map<snapid_t,snaplink_t>::iterator p = srnode.past_parents.lower_bound(snapid);
-  if (p != srnode.past_parents.end() && p->second.first <= snapid) {
-    CInode *oldparent = mdcache->get_inode(p->second.ino);
-    assert(oldparent);  // call open_parents first!
-    assert(oldparent->snaprealm);    
-    return oldparent->snaprealm->get_snapname(snapid, atino);
-  }
-
-  assert(srnode.current_parent_since <= snapid);
-  assert(parent);
-  return parent->get_snapname(snapid, atino);
-}
-
 snapid_t SnapRealm::resolve_snapname(const string& n, inodeno_t atino, snapid_t first, snapid_t last)
 {
   // first try me
