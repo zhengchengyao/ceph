@@ -910,7 +910,7 @@ public:
   void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
 
   // -- snap --
-  void open_snaprealm(bool no_split=false);
+  void open_snaprealm();
   void close_snaprealm(bool no_join=false);
   SnapRealm *find_snaprealm();
   void encode_snap(bufferlist& bl);

@@ -2574,7 +2574,7 @@ old_inode_t * CInode::pick_old_inode(snapid_t snap)
   return NULL;
 }
 
-void CInode::open_snaprealm(bool nosplit)
+void CInode::open_snaprealm()
 {
   if (!snaprealm) {
     SnapRealm *parent = find_snaprealm();
@@ -2585,8 +2585,7 @@ void CInode::open_snaprealm(bool nosplit)
 	       << dendl;
       dout(30) << " siblings are " << parent->open_children << dendl;
       snaprealm->parent = parent;
-      if (!nosplit)
-	parent->split_at(snaprealm);
+      parent->split_at(snaprealm);
       parent->open_children.insert(snaprealm);
     }
   }
