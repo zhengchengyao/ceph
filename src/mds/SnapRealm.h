@@ -141,7 +141,6 @@ struct SnapRealm {
   void adjust_parent();
 
   void split_at(SnapRealm *child);
-  void join(SnapRealm *child);
 
   void add_cap(client_t client, Capability *cap) {
     if (client_caps.count(client) == 0)

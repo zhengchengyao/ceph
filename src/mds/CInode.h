@@ -911,7 +911,7 @@ public:
 
   // -- snap --
   void open_snaprealm();
-  void close_snaprealm(bool no_join=false);
+  void close_snaprealm();
   SnapRealm *find_snaprealm();
   void encode_snap(bufferlist& bl);
   void decode_snap(bufferlist::iterator& p);
