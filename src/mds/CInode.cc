@@ -2587,9 +2587,11 @@ void CInode::open_snaprealm()
       snaprealm->parent = parent;
       parent->split_at(snaprealm);
       parent->open_children.insert(snaprealm);
+      snaprealm->merge_snaps_from(parent);
     }
   }
 }
+
 void CInode::close_snaprealm()
 {
   if (snaprealm) {

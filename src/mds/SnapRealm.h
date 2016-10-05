@@ -155,6 +155,7 @@ struct SnapRealm {
     }
   }
 
+  void merge_snaps_from(const SnapRealm *parent);
 };
 
 ostream& operator<<(ostream& out, const SnapRealm &realm);

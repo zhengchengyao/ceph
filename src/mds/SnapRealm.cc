@@ -532,3 +532,18 @@ void SnapRealm::prune_past_parents()
   }
 }
 
+void SnapRealm::merge_snaps_from(const SnapRealm *parent)
+{
+  // copy parent snaps from when we became its child
+  // TODO: this will let us get name updates while we're still connected, but
+  // we probably only want to copy new snaps, rather than overwriting stuff.
+  // Hopefully it doesn't break anything though?
+  auto parent_it = parent->srnode.snaps.lower_bound(srnode.current_parent_since);
+  for (; parent_it != parent->srnode.snaps.end(); ++parent_it) {
+    if (!srnode.snaps.count(parent_it->first)) {
+      srnode.seq = parent->srnode.seq;
+      srnode.last_created = parent->srnode.last_created;
+    }
+    srnode.snaps[parent_it->first] = parent_it->second;
+  }
+}

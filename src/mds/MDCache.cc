@@ -9143,6 +9143,8 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
 
     dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
+    // this invokes on local "root" too, but that's okay
+    realm->merge_snaps_from(realm->parent);
 
     for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
 	 p != realm->client_caps.end();
