@@ -463,29 +463,8 @@ bool StrayManager::_consume(CDentry *dn, bool trunc, uint32_t ops_required)
   return true;
 }
 
-class C_OpenSnapParents : public StrayManagerContext {
-  CDentry *dn;
-  bool trunc;
-  uint32_t ops_required;
-  public:
-    C_OpenSnapParents(StrayManager *sm_, CDentry *dn_, bool t, uint32_t ops) :
-      StrayManagerContext(sm_), dn(dn_), trunc(t), ops_required(ops) { }
-    void finish(int r) {
-      sm->_process(dn, trunc, ops_required);
-    }
-};
-
 void StrayManager::_process(CDentry *dn, bool trunc, uint32_t ops_required)
 {
-  CInode *in = dn->get_linkage()->get_inode();
-  if (in->snaprealm &&
-      !in->snaprealm->have_past_parents_open() &&
-      !in->snaprealm->open_parents(new C_OpenSnapParents(this, dn, trunc,
-							 ops_required))) {
-    // this can happen if the dentry had been trimmed from cache.
-    return;
-  }
-
   if (trunc) {
     truncate(dn, ops_required);
   } else {
@@ -624,17 +603,13 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
     // only important for directories.  normal file data snaps are handled
     // by the object store.
     if (in->snaprealm) {
-      if (!in->snaprealm->have_past_parents_open() &&
-          !in->snaprealm->open_parents(new C_MDC_EvalStray(this, dn))) {
-        return false;
-      }
-      in->snaprealm->prune_past_parents();
+      in->snaprealm->prune_deleted_snaps();
       in->purge_stale_snap_data(in->snaprealm->get_snaps());
     }
     if (in->is_dir()) {
-      if (in->snaprealm && in->snaprealm->has_past_parents()) {
-	dout(20) << "  directory has past parents "
-		 << in->snaprealm->srnode.past_parents << dendl;
+      if (in->snaprealm && in->snaprealm->has_live_snapshots()) {
+	dout(20) << "  directory has live snapshots "
+		 << in->snaprealm->srnode.snaps << dendl;
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
 			     << in->ino() << " has failed, missing object\n";
@@ -690,13 +665,16 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
 	logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
       }
     // don't purge multiversion inode with snap data
-    } else if (in->snaprealm && in->snaprealm->has_past_parents() &&
+    } else if (in->snaprealm && in->snaprealm->has_live_snapshots() &&
               !in->old_inodes.empty()) {
+      // TODO: Pretty sure has_live_snapshots() and old_inodes.empty() should
+      // be equivalent?
+
       // A file with snapshots: we will truncate the HEAD revision
       // but leave the metadata intact.
       assert(!in->is_dir());
-      dout(20) << " file has past parents "
-        << in->snaprealm->srnode.past_parents << dendl;
+      dout(20) << " file has live snapshots "
+        << in->snaprealm->srnode.snaps << dendl;
       if (in->is_file() && in->get_projected_inode()->size > 0) {
 	enqueue(dn, true); // truncate head objects    
       }

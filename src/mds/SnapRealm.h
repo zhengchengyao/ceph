@@ -83,8 +83,6 @@ struct SnapRealm {
   void remove_open_past_parent(inodeno_t ino, snapid_t last);
   void close_parents();
 
-  void prune_past_parents();
-  bool has_past_parents() const { return !srnode.past_parents.empty(); }
   void prune_deleted_snaps();
   bool has_live_snapshots() { // this is what StrayManager REALLY cares about...
     return !srnode.snaps.empty();

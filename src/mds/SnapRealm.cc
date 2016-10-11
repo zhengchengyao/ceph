@@ -509,29 +509,6 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
 
 
-void SnapRealm::prune_past_parents()
-{
-  dout(10) << "prune_past_parents" << dendl;
-  check_cache();
-  assert(open);
-
-  map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.begin();
-  while (p != srnode.past_parents.end()) {
-    set<snapid_t>::iterator q = cached_snaps.lower_bound(p->second.first);
-    if (q == cached_snaps.end() ||
-	*q > p->first) {
-      dout(10) << "prune_past_parents pruning [" << p->second.first << "," << p->first 
-	       << "] " << p->second.ino << dendl;
-      remove_open_past_parent(p->second.ino, p->first);
-      srnode.past_parents.erase(p++);
-    } else {
-      dout(10) << "prune_past_parents keeping [" << p->second.first << "," << p->first 
-	       << "] " << p->second.ino << dendl;
-      ++p;
-    }
-  }
-}
-
 void SnapRealm::prune_deleted_snaps()
 {
   const auto& data_pools = mdcache->mds->mdsmap->get_data_pools();
