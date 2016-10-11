@@ -25,6 +25,7 @@ class SnapServer : public MDSTableServer {
 protected:
   MonClient *mon_client;
   snapid_t last_snap;
+  // TODO: Well, having an in-memory map of every snapid in the system seems bad
   map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
   

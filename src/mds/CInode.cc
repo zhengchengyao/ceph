@@ -2588,6 +2588,9 @@ void CInode::open_snaprealm()
       parent->split_at(snaprealm);
       parent->open_children.insert(snaprealm);
       snaprealm->merge_snaps_from(parent);
+      // TODO: prune_deleted_snaps() means
+      // we change the sr_t without incrementing seq!
+      snaprealm->prune_deleted_snaps();
     }
   }
 }

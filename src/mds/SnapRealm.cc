@@ -532,6 +532,40 @@ void SnapRealm::prune_past_parents()
   }
 }
 
+void SnapRealm::prune_deleted_snaps()
+{
+  const auto& data_pools = mdcache->mds->mdsmap->get_data_pools();
+  set<snapid_t> to_purge;
+
+  mdcache->mds->objecter->with_osdmap(
+    [this, &data_pools, &to_purge](const OSDMap& osdmap) {
+      auto i = this->srnode.snaps.begin();
+      while (i != this->srnode.snaps.end()) {
+	auto j = i++;
+	bool removed = false;
+	for (auto pool : data_pools) {
+	  // we have to check each pool because a data pool might have been
+	  // added after the snap was actually deleted, and I can't think of an
+	  // efficient way for SnapClients to query this state instead.
+	  const pg_pool_t *pgpool = osdmap.get_pg_pool(pool);
+	  if (pgpool && pgpool->is_removed_snap(j->first)) {
+	    removed = true;
+	    break;
+	  }
+	}
+	if (removed) {
+	  to_purge.insert(j->first);
+	}
+      }
+    });
+  // TODO: SnapRealm is about to get a lot smaller; can we pull out the explicit
+  // dependence on Objecter/OSDMap and write some unit tests?
+
+  for (auto snapid : to_purge) {
+    srnode.snaps.erase(snapid);
+  }
+}
+
 void SnapRealm::merge_snaps_from(const SnapRealm *parent)
 {
   // copy parent snaps from when we became its child

@@ -85,6 +85,10 @@ struct SnapRealm {
 
   void prune_past_parents();
   bool has_past_parents() const { return !srnode.past_parents.empty(); }
+  void prune_deleted_snaps();
+  bool has_live_snapshots() { // this is what StrayManager REALLY cares about...
+    return !srnode.snaps.empty();
+  }
 
   void build_snap_set(set<snapid_t>& s, 
 		      snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
