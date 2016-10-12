@@ -294,7 +294,11 @@ void SnapServer::check_osd_map(bool force)
     // snapids. We should "purge" all values less than the values we are removing
     // that we already know not to exist, or similar!
     dout(10) << "requesting removal of " << all_purge << dendl;
-    MRemoveSnaps *m = new MRemoveSnaps(all_purge);
+    map<int, snapid_t> snap_seqs;
+    for (auto i : all_purge) {
+      snap_seqs[i.first] = last_snap;
+    }
+    MRemoveSnaps *m = new MRemoveSnaps(all_purge, snap_seqs);
     mon_client->send_mon_message(m);
   }
 

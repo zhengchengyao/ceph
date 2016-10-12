@@ -2504,6 +2504,9 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
       continue;
     }
     const pg_pool_t *pi = osdmap.get_pg_pool(q->first);
+    if (m->snap_seqs[q->first] > pi->get_snap_seq()) {
+      return false;
+    }
     for (vector<snapid_t>::iterator p = q->second.begin();
 	 p != q->second.end();
 	 ++p) {
@@ -2532,7 +2535,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
       continue;
     }
 
-    pg_pool_t& pi = osdmap.pools[p->first];
+    const pg_pool_t& pi = osdmap.pools[p->first];
     for (vector<snapid_t>::iterator q = p->second.begin();
 	 q != p->second.end();
 	 ++q) {
@@ -2549,6 +2552,15 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 	}
 	newpi->set_snap_epoch(pending_inc.epoch);
       }
+    }
+  }
+  for (auto i : m->snap_seqs) {
+    const pg_pool_t& pi = osdmap.pools[i.first];
+    pg_pool_t *newpi = pending_inc.get_new_pool(i.first, &pi);
+    if (i.second > newpi->get_snap_seq()) {
+      dout(10) << " pool " << i.first << " snap_seq " << newpi->get_snap_seq()
+	       << " -> " << i.second << dendl;
+      newpi->set_snap_seq(i.second);
     }
   }
   return true;

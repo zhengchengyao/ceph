@@ -18,13 +18,19 @@
 #include "messages/PaxosServiceMessage.h"
 
 struct MRemoveSnaps : public PaxosServiceMessage {
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 2;
   map<int, vector<snapid_t> > snaps;
+  map<int, snapid_t> snap_seqs;
   
+  // TODO: What the heck is this 0 in PaxosServiceMessage? It's a "version"; is
+  // it just an outdated scheme we should zap?
   MRemoveSnaps() : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) { }
-  MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0) {
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0, HEAD_VERSION, COMPAT_VERSION)  { }
+  MRemoveSnaps(map<int, vector<snapid_t> >& s, map<int, snapid_t> seqs) : 
+    PaxosServiceMessage(MSG_REMOVE_SNAPS, 0, HEAD_VERSION, COMPAT_VERSION) {
     snaps.swap(s);
+    snap_seqs.swap(seqs);
   }
 private:
   ~MRemoveSnaps() {}
@@ -38,12 +44,28 @@ public:
   void encode_payload(uint64_t features) {
     paxos_encode();
     ::encode(snaps, payload);
+    ::encode(snap_seqs, payload);
+    // TODO: I should probably just kill this, right? It's polite to
+    // older monitors but otherwise just noise and those are usually
+    // upgraded first
+    bool can_skip_seqs = true;
+    for (auto i : snap_seqs) {
+      if (0 != i.second) {
+	can_skip_seqs = false;
+	break;
+      }
+    }
+    if (can_skip_seqs) {
+      header.compat_version = 0;
+    }
   }
   void decode_payload() {
     bufferlist::iterator p = payload.begin();
     paxos_decode(p);
     ::decode(snaps, p);
-    assert(p.end());
+    if (header.version >= 2) {
+      ::decode(snap_seqs, p);
+    }
   }
 
 };
