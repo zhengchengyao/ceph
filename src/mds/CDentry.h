@@ -153,6 +153,7 @@ protected:
 public:
   elist<CDentry*>::item item_dirty;
   elist<CDentry*>::item item_stray;
+  elist<CDentry*>::item item_snaps_block_stray;
 
 protected:
   friend class Migrator;
@@ -191,7 +192,6 @@ public:
     first(f), last(l),
     dir(0),
     version(0), projected_version(0),
-    item_dirty(this),
     lock(this, &lock_type),
     versionlock(this, &versionlock_type) {
     g_num_dn++;

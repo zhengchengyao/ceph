@@ -42,7 +42,8 @@ class StrayManager
 
   // Has passed through eval_stray and still has refs
   elist<CDentry*> delayed_eval_stray;
-
+  // Still has live snapshots preventing purge
+  elist<CDentry*> snaps_blocking_stray;
   // No more refs, can purge these
   std::list<QueuedStray> ready_for_purge;
 
@@ -252,6 +253,12 @@ class StrayManager
    * Call this whenever one of those operands changes.
    */
   void update_op_limit();
+
+  /**
+   * Attempt to purge snapshots for stray entries which are
+   * blocked on them.
+   */
+  void try_purge_snaps();
 
   /*
    * track stray dentries that have been trimmed from cache

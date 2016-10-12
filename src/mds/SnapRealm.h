@@ -32,7 +32,6 @@ struct SnapRealm {
 
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
-  set<SnapRealm*> open_past_children;  // past children who has pinned me
 
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.

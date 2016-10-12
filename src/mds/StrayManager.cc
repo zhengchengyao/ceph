@@ -610,6 +610,7 @@ bool StrayManager::__eval_stray(CDentry *dn, bool delay)
       if (in->snaprealm && in->snaprealm->has_live_snapshots()) {
 	dout(20) << "  directory has live snapshots "
 		 << in->snaprealm->srnode.snaps << dendl;
+	snaps_blocking_stray.push_back(&dn->item_snaps_block_stray);
 	if (in->state_test(CInode::STATE_MISSINGOBJS)) {
 	  mds->clog->error() << "previous attempt at committing dirfrag of ino "
 			     << in->ino() << " has failed, missing object\n";
@@ -804,6 +805,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 
 StrayManager::StrayManager(MDSRank *mds)
   : delayed_eval_stray(member_offset(CDentry, item_stray)),
+    snaps_blocking_stray(member_offset(CDentry, item_snaps_block_stray)),
     mds(mds), logger(NULL),
     ops_in_flight(0), files_purging(0),
     max_purge_ops(0), 
@@ -934,6 +936,17 @@ void StrayManager::update_op_limit()
   // User may also specify a hard limit, apply this if so.
   if (g_conf->mds_max_purge_ops) {
     max_purge_ops = MIN(max_purge_ops, g_conf->mds_max_purge_ops);
+  }
+}
+
+void StrayManager::try_purge_snaps()
+{
+  for (elist<CDentry*>::iterator i = snaps_blocking_stray.begin();
+       !i.end(); ++i) {
+    CInode *in = (*i)->get_projected_linkage()->get_inode();
+    in->snaprealm->prune_deleted_snaps();
+    in->purge_stale_snap_data(in->snaprealm->get_snaps());
+    eval_stray(*i);
   }
 }
 
