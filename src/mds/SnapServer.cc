@@ -288,6 +288,11 @@ void SnapServer::check_osd_map(bool force)
   }
 
   if (!all_purge.empty()) {
+    // TODO: we intersperse actual allocated snapids with values just used
+    // as seqs when deleting or updating. That's *very* unfriendly to the OSDMap's
+    // deleted_snaps interval_set and we have our own collection of known-existing
+    // snapids. We should "purge" all values less than the values we are removing
+    // that we already know not to exist, or similar!
     dout(10) << "requesting removal of " << all_purge << dendl;
     MRemoveSnaps *m = new MRemoveSnaps(all_purge);
     mon_client->send_mon_message(m);
