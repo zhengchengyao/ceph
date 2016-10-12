@@ -171,33 +171,6 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   return true;
 }
 
-bool SnapRealm::have_past_parents_open(snapid_t first, snapid_t last)
-{
-  dout(10) << "have_past_parents_open [" << first << "," << last << "]" << dendl;
-  if (open)
-    return true;
-
-  for (map<snapid_t, snaplink_t>::iterator p = srnode.past_parents.lower_bound(first);
-       p != srnode.past_parents.end();
-       ++p) {
-    if (p->second.first > last)
-      break;
-    dout(10) << " past parent [" << p->second.first << "," << p->first << "] was "
-	     << p->second.ino << dendl;
-    if (open_past_parents.count(p->second.ino) == 0) {
-      dout(10) << " past parent " << p->second.ino << " is not open" << dendl;
-      return false;
-    }
-    SnapRealm *parent_realm = open_past_parents[p->second.ino].first;
-    if (!parent_realm->have_past_parents_open(MAX(first, p->second.first),
-					      MIN(last, p->first)))
-      return false;
-  }
-
-  open = true;
-  return true;
-}
-
 void SnapRealm::close_parents()
 {
   for (auto p = open_past_parents.begin(); p != open_past_parents.end(); ++p) {

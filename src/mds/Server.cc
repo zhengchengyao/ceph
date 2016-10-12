@@ -788,13 +788,8 @@ void Server::handle_client_reconnect(MClientReconnect *m)
       continue;
     if (in) {
       assert(in->snaprealm);
-      if (in->snaprealm->have_past_parents_open()) {
-	dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
-	mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
-      } else {
-	dout(15) << "open snaprealm (w/o past parents) on " << *in << dendl;
-	mdcache->add_reconnected_snaprealm(from, inodeno_t(p->ino), snapid_t(p->seq));
-      }
+      dout(15) << "open snaprealm (w/ past parents) on " << *in << dendl;
+      mdcache->finish_snaprealm_reconnect(from, in->snaprealm, snapid_t(p->seq));
     } else {
       dout(15) << "open snaprealm (w/o inode) on " << inodeno_t(p->ino)
 	       << " seq " << p->seq << dendl;
@@ -8320,8 +8315,7 @@ void Server::_rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid)
   respond_to_request(mdr, 0);
 
   // purge snapshot data
-  if (diri->snaprealm->have_past_parents_open())
-    diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
+  diri->purge_stale_snap_data(diri->snaprealm->get_snaps());
 }
 
 struct C_MDS_renamesnap_finish : public MDSInternalContext {

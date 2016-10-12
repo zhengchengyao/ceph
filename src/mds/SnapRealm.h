@@ -77,7 +77,6 @@ struct SnapRealm {
     delete retryorfinish;
     return true;
   }
-  bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP);
   void add_open_past_parent(SnapRealm *parent, snapid_t last);
   void remove_open_past_parent(inodeno_t ino, snapid_t last);
   void close_parents();

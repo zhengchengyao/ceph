@@ -5305,28 +5305,16 @@ bool MDCache::process_imported_caps()
 
 void MDCache::check_realm_past_parents(SnapRealm *realm, bool reconnect)
 {
-  // are this realm's parents fully open?
-  if (realm->have_past_parents_open()) {
-    dout(10) << " have past snap parents for realm " << *realm 
-	     << " on " << *realm->inode << dendl;
-    if (reconnect) {
-      // finish off client snaprealm reconnects?
-      auto p = reconnected_snaprealms.find(realm->inode->ino());
-      if (p != reconnected_snaprealms.end()) {
-	for (auto q = p->second.begin(); q != p->second.end(); ++q)
-	  finish_snaprealm_reconnect(q->first, realm, q->second);
-	reconnected_snaprealms.erase(p);
-      }
-    }
-  } else {
-    if (!missing_snap_parents.count(realm->inode)) {
-      dout(10) << " MISSING past snap parents for realm " << *realm
-	       << " on " << *realm->inode << dendl;
-      realm->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
-      missing_snap_parents[realm->inode].size();   // just to get it into the map!
-    } else {
-      dout(10) << " (already) MISSING past snap parents for realm " << *realm 
-	       << " on " << *realm->inode << dendl;
+  // TODO: kill this function entirely as we work through things!
+  dout(10) << " have past snap parents for realm " << *realm 
+	   << " on " << *realm->inode << dendl;
+  if (reconnect) {
+    // finish off client snaprealm reconnects?
+    auto p = reconnected_snaprealms.find(realm->inode->ino());
+    if (p != reconnected_snaprealms.end()) {
+      for (auto q = p->second.begin(); q != p->second.end(); ++q)
+	finish_snaprealm_reconnect(q->first, realm, q->second);
+      reconnected_snaprealms.erase(p);
     }
   }
 }
@@ -5402,15 +5390,10 @@ void MDCache::choose_lock_states_and_reconnect_caps()
     check_realm_past_parents(realm, realm == in->snaprealm);
 
     if (p != reconnected_caps.end()) {
-      bool missing_snap_parent = false;
       // also, make sure client's cap is in the correct snaprealm.
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
 	if (q->second.snap_follows > 0 && q->second.snap_follows < in->first - 1) {
-	  if (realm->have_past_parents_open()) {
-	    rebuild_need_snapflush(in, realm, q->first, q->second.snap_follows);
-	  } else {
-	    missing_snap_parent = true;
-	  }
+	  rebuild_need_snapflush(in, realm, q->first, q->second.snap_follows);
 	}
 
 	if (q->second.realm_ino == realm->inode->ino()) {
@@ -5418,17 +5401,9 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 	} else {
 	  dout(15) << "  client." << q->first << " has wrong realm " << q->second.realm_ino
 		   << " != " << realm->inode->ino() << dendl;
-	  if (realm->have_past_parents_open()) {
-	    // ok, include in a split message _now_.
 	    prepare_realm_split(realm, q->first, in->ino(), splits);
-	  } else {
-	    // send the split later.
-	    missing_snap_parent = true;
-	  }
 	}
       }
-      if (missing_snap_parent)
-	missing_snap_parents[realm->inode].insert(in);
     }
   }    
 
@@ -5606,33 +5581,23 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
 			    uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 			    int peer, int p_flags)
 {
-  client_t client = session->info.inst.name.num();
   SnapRealm *realm = in->find_snaprealm();
-  if (realm->have_past_parents_open()) {
-    dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
-    if (cap->get_last_seq() == 0) // reconnected cap
-      cap->inc_last_seq();
-    cap->set_last_issue();
-    cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
-    cap->clear_new();
-    MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
-					in->ino(),
-					realm->inode->ino(),
-					cap->get_cap_id(), cap->get_last_seq(),
-					cap->pending(), cap->wanted(), 0,
-					cap->get_mseq(), mds->get_osd_epoch_barrier());
-    in->encode_cap_message(reap, cap);
-    realm->build_snap_trace(reap->snapbl);
-    reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
-    mds->send_message_client_counted(reap, session);
-  } else {
-    dout(10) << "do_cap_import missing past snap parents, delaying " << session->info.inst.name << " mseq "
-	     << cap->get_mseq() << " on " << *in << dendl;
-    in->auth_pin(this);
-    cap->inc_suppress();
-    delayed_imported_caps[client].insert(in);
-    missing_snap_parents[in].size();
-  }
+  dout(10) << "do_cap_import " << session->info.inst.name << " mseq " << cap->get_mseq() << " on " << *in << dendl;
+  if (cap->get_last_seq() == 0) // reconnected cap
+    cap->inc_last_seq();
+  cap->set_last_issue();
+  cap->set_last_issue_stamp(ceph_clock_now(g_ceph_context));
+  cap->clear_new();
+  MClientCaps *reap = new MClientCaps(CEPH_CAP_OP_IMPORT,
+				      in->ino(),
+				      realm->inode->ino(),
+				      cap->get_cap_id(), cap->get_last_seq(),
+				      cap->pending(), cap->wanted(), 0,
+				      cap->get_mseq(), mds->get_osd_epoch_barrier());
+  in->encode_cap_message(reap, cap);
+  realm->build_snap_trace(reap->snapbl);
+  reap->set_cap_peer(p_cap_id, p_seq, p_mseq, peer, p_flags);
+  mds->send_message_client_counted(reap, session);
 }
 
 void MDCache::do_delayed_cap_imports()
