@@ -1774,6 +1774,8 @@ void CInode::decode_lock_state(int type, bufferlist& bl)
       if (snaprealm)
 	seq = snaprealm->srnode.seq;
       decode_snap(p);
+      // TODO: hey, if we've pruned without updating seq this notification
+      // won't happen...is that bad?
       if (snaprealm && snaprealm->srnode.seq != seq)
 	mdcache->do_realm_invalidate_and_update_notify(this, seq ? CEPH_SNAP_OP_UPDATE:CEPH_SNAP_OP_SPLIT);
     }

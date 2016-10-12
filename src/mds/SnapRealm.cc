@@ -214,7 +214,7 @@ void SnapRealm::close_parents()
  * for the intervals during which they were our parent.
  */
 void SnapRealm::build_snap_set(set<snapid_t> &s,
-			       snapid_t& max_seq, snapid_t& max_last_created, snapid_t& max_last_destroyed,
+			       snapid_t& max_seq, snapid_t& max_last_created,
 			       snapid_t first, snapid_t last)
 {
   dout(10) << "build_snap_set [" << first << "," << last << "] on " << *this << dendl;
@@ -223,8 +223,6 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     max_seq = srnode.seq;
   if (srnode.last_created > max_last_created)
     max_last_created = srnode.last_created;
-  if (srnode.last_destroyed > max_last_destroyed)
-    max_last_destroyed = srnode.last_destroyed;
 
   // include my snaps within interval [first,last]
   for (map<snapid_t, SnapInfo>::iterator p = srnode.snaps.lower_bound(first); // first element >= first
@@ -239,12 +237,12 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
     CInode *oldparent = mdcache->get_inode(p->second.ino);
     assert(oldparent);  // call open_parents first!
     assert(oldparent->snaprealm);
-    oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
+    oldparent->snaprealm->build_snap_set(s, max_seq, max_last_created,
 					 MAX(first, p->second.first),
 					 MIN(last, p->first));
   }
   if (srnode.current_parent_since <= last && parent)
-    parent->build_snap_set(s, max_seq, max_last_created, max_last_destroyed,
+    parent->build_snap_set(s, max_seq, max_last_created,
 			   MAX(first, srnode.current_parent_since), last);
 }
 
@@ -259,9 +257,8 @@ void SnapRealm::check_cache()
   cached_snap_context.clear();
 
   cached_last_created = srnode.last_created;
-  cached_last_destroyed = srnode.last_destroyed;
   cached_seq = srnode.seq;
-  build_snap_set(cached_snaps, cached_seq, cached_last_created, cached_last_destroyed,
+  build_snap_set(cached_snaps, cached_seq, cached_last_created,
 		 0, CEPH_NOSNAP);
 
   cached_snap_trace.clear();
@@ -271,7 +268,6 @@ void SnapRealm::check_cache()
 	   << " seq " << srnode.seq
 	   << " cached_seq " << cached_seq
 	   << " cached_last_created " << cached_last_created
-	   << " cached_last_destroyed " << cached_last_destroyed
 	   << ")" << dendl;
 }
 
@@ -483,8 +479,8 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
     if (!srnode.past_parents.empty()) {
       snapid_t last = srnode.past_parents.rbegin()->first;
       set<snapid_t> past;
-      snapid_t max_seq, max_last_created, max_last_destroyed;
-      build_snap_set(past, max_seq, max_last_created, max_last_destroyed, 0, last);
+      snapid_t max_seq, max_last_created;
+      build_snap_set(past, max_seq, max_last_created, 0, last);
       info.prior_parent_snaps.reserve(past.size());
       for (set<snapid_t>::reverse_iterator p = past.rbegin(); p != past.rend(); ++p)
 	info.prior_parent_snaps.push_back(*p);
@@ -513,9 +509,10 @@ void SnapRealm::prune_deleted_snaps()
 {
   const auto& data_pools = mdcache->mds->mdsmap->get_data_pools();
   set<snapid_t> to_purge;
+  snapid_t last_destroyed = 0;
 
   mdcache->mds->objecter->with_osdmap(
-    [this, &data_pools, &to_purge](const OSDMap& osdmap) {
+    [this, &data_pools, &to_purge, &last_destroyed](const OSDMap& osdmap) {
       auto i = this->srnode.snaps.begin();
       while (i != this->srnode.snaps.end()) {
 	auto j = i++;
@@ -527,6 +524,7 @@ void SnapRealm::prune_deleted_snaps()
 	  const pg_pool_t *pgpool = osdmap.get_pg_pool(pool);
 	  if (pgpool && pgpool->is_removed_snap(j->first)) {
 	    removed = true;
+	    last_destroyed = MAX(last_destroyed, pgpool->get_snap_seq());
 	    break;
 	  }
 	}
@@ -538,8 +536,14 @@ void SnapRealm::prune_deleted_snaps()
   // TODO: SnapRealm is about to get a lot smaller; can we pull out the explicit
   // dependence on Objecter/OSDMap and write some unit tests?
 
-  for (auto snapid : to_purge) {
-    srnode.snaps.erase(snapid);
+  if (last_destroyed > 0) {
+    for (auto snapid : to_purge) {
+      srnode.snaps.erase(snapid);
+    }
+    assert(last_destroyed > srnode.last_destroyed);
+    srnode.last_destroyed = last_destroyed;
+  } else {
+    assert(to_purge.empty());
   }
 }
 

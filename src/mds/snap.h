@@ -72,7 +72,7 @@ struct sr_t {
   snapid_t seq;                     // basically, a version/seq # for changes to _this_ realm.
   snapid_t created;                 // when this realm was created.
   snapid_t last_created;            // last snap created in _this_ realm.
-  snapid_t last_destroyed;          // seq for last removal
+  snapid_t last_destroyed;          // upper bound of system snapid on last purge; unrelated to seq
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
   map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
