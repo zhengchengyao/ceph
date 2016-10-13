@@ -468,17 +468,11 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
 	     snaprealm->srnode.past_parents.size()) {
     invalidate_cached_snaps = true;
     // re-open past parents
-    snaprealm->_close_parents();
-
     dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
 	     << " -> " << next_snaprealm->past_parents << dendl;
   }
   snaprealm->srnode = *next_snaprealm;
   delete next_snaprealm;
-
-  // we should be able to open these up (or have them already be open).
-  bool ok = snaprealm->_open_parents(NULL);
-  assert(ok);
 
   if (invalidate_cached_snaps)
     snaprealm->invalidate_cached_snaps();
@@ -2601,7 +2595,6 @@ void CInode::close_snaprealm()
 {
   if (snaprealm) {
     dout(15) << "close_snaprealm " << *snaprealm << dendl;
-    snaprealm->close_parents();
     if (snaprealm->parent) {
       snaprealm->parent->open_children.erase(snaprealm);
     }
@@ -2637,10 +2630,6 @@ void CInode::decode_snap_blob(bufferlist& snapbl)
     open_snaprealm();
     bufferlist::iterator p = snapbl.begin();
     ::decode(snaprealm->srnode, p);
-    if (is_base()) {
-      bool ok = snaprealm->_open_parents(NULL);
-      assert(ok);
-    }
     dout(20) << "decode_snap_blob " << *snaprealm << dendl;
   }
 }

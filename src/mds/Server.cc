@@ -2787,11 +2787,6 @@ void Server::handle_client_lookup_ino(MDRequestRef& mdr,
     return;
   }
 
-  if (mdr && in->snaprealm && !in->snaprealm->is_open() &&
-      !in->snaprealm->open_parents(new C_MDS_RetryRequest(mdcache, mdr))) {
-    return;
-  }
-
   // check for nothing (not read or write); this still applies the
   // path check.
   if (!check_access(mdr, in, 0))

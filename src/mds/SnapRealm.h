@@ -31,7 +31,6 @@ struct SnapRealm {
   MDCache *mdcache;
   CInode *inode;
 
-  bool open;
   SnapRealm *parent;
   set<SnapRealm*> open_children;    // active children that are currently open
   set<SnapRealm*> open_past_children;  // past children who has pinned me
@@ -50,7 +49,7 @@ struct SnapRealm {
   SnapRealm(MDCache *c, CInode *in) : 
     srnode(),
     mdcache(c), inode(in),
-    open(true), parent(0),
+    parent(0),
     inodes_with_caps(0) 
   { }
 
@@ -63,17 +62,6 @@ struct SnapRealm {
     }
     return false;
   }
-
-  bool is_open() const { return open; }
-  void _close_parents() { open = false; }
-  bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(MDSInternalContextBase *retryorfinish) {
-    if (!_open_parents(retryorfinish))
-      return false;
-    delete retryorfinish;
-    return true;
-  }
-  void close_parents();
 
   void prune_deleted_snaps();
   bool has_live_snapshots() { // this is what StrayManager REALLY cares about...

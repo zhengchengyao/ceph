@@ -57,34 +57,6 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   return out;
 }
 
-
-bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, snapid_t last)
-{
-  dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
-  if (open)
-    return true;
-
-  // make sure my current parents' parents are open...
-  // TODO: Should be able to assume this, right? In which case knock out the
-  // whole "open" concept entirely
-  if (parent) {
-    dout(10) << " current parent [" << srnode.current_parent_since << ",head] is " << *parent
-	     << " on " << *parent->inode << dendl;
-    if (last >= srnode.current_parent_since &&
-	!parent->_open_parents(finish, MAX(first, srnode.current_parent_since), last))
-      return false;
-  }
-  open = true;
-  return true;
-}
-
-void SnapRealm::close_parents()
-{
-  // TODO: Zap this function completely
-  return;
-}
-
-
 /*
  * get list of snaps for this realm.  we must include parents' snaps
  * for the intervals during which they were our parent.
@@ -110,7 +82,6 @@ void SnapRealm::build_snap_set(set<snapid_t> &s,
 
 void SnapRealm::check_cache()
 {
-  assert(open);
   if (cached_seq >= srnode.seq)
     return;
 

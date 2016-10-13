@@ -5625,39 +5625,34 @@ void MDCache::open_snap_parents()
   while (p != missing_snap_parents.end()) {
     CInode *in = p->first;
     assert(in->snaprealm);
-    if (in->snaprealm->open_parents(gather.new_sub())) {
-      dout(10) << " past parents now open on " << *in << dendl;
+    dout(10) << " past parents now open on " << *in << dendl;
 
-      for (CInode *child : p->second) {
-	auto q = reconnected_caps.find(child->ino());
-	assert(q != reconnected_caps.end());
-	for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	  if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
-	    rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
-	  }
-	  // make sure client's cap is in the correct snaprealm.
-	  if (r->second.realm_ino != in->ino()) {
-	    prepare_realm_split(in->snaprealm, r->first, child->ino(), splits);
-	  }
+    for (CInode *child : p->second) {
+      auto q = reconnected_caps.find(child->ino());
+      assert(q != reconnected_caps.end());
+      for (auto r = q->second.begin(); r != q->second.end(); ++r) {
+	if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
+	  rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
+	}
+	// make sure client's cap is in the correct snaprealm.
+	if (r->second.realm_ino != in->ino()) {
+	  prepare_realm_split(in->snaprealm, r->first, child->ino(), splits);
 	}
       }
+    }
 
-      missing_snap_parents.erase(p++);
+    missing_snap_parents.erase(p++);
 
-      in->put(CInode::PIN_OPENINGSNAPPARENTS);
+    in->put(CInode::PIN_OPENINGSNAPPARENTS);
 
-      // finish off client snaprealm reconnects?
-      map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
-      if (q != reconnected_snaprealms.end()) {
-	for (map<client_t,snapid_t>::iterator r = q->second.begin();
-	     r != q->second.end();
-	     ++r)
-	  finish_snaprealm_reconnect(r->first, in->snaprealm, r->second);
-      	reconnected_snaprealms.erase(q);
-      }
-    } else {
-      dout(10) << " opening past parents on " << *in << dendl;
-      ++p;
+    // finish off client snaprealm reconnects?
+    map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
+    if (q != reconnected_snaprealms.end()) {
+      for (map<client_t,snapid_t>::iterator r = q->second.begin();
+	   r != q->second.end();
+	   ++r)
+	finish_snaprealm_reconnect(r->first, in->snaprealm, r->second);
+      reconnected_snaprealms.erase(q);
     }
   }
 
@@ -7680,12 +7675,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
   if (cur->state_test(CInode::STATE_PURGING))
     return -ESTALE;
 
-  // make sure snaprealm are open...
-  if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
-      !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
-    return 1;
-  }
-
   // start trace
   if (pdnvec)
     pdnvec->clear();
@@ -7846,11 +7835,6 @@ int MDCache::path_traverse(MDRequestRef& mdr, Message *req, MDSInternalContextBa
       }
 
       cur = in;
-      // make sure snaprealm are open...
-      if (mdr && cur->snaprealm && !cur->snaprealm->is_open() &&
-	  !cur->snaprealm->open_parents(_get_waiter(mdr, req, fin))) {
-	return 1;
-      }
 
       // add to trace, continue.
       touch_inode(cur);
@@ -9202,8 +9186,6 @@ void MDCache::_snaprealm_create_finish(MDRequestRef& mdr, MutationRef& mut, CIno
   in->open_snaprealm();
   in->snaprealm->srnode.seq = seq;
   in->snaprealm->srnode.created = seq;
-  bool ok = in->snaprealm->_open_parents(NULL);
-  assert(ok);
 
   do_realm_invalidate_and_update_notify(in, CEPH_SNAP_OP_SPLIT);
 
