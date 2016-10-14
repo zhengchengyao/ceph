@@ -94,8 +94,7 @@ struct SnapRealm {
       return *cached_snaps.rbegin();
   }
   snapid_t get_newest_seq() {
-    check_cache();
-    return cached_seq;
+    return srnode.seq;
   }
 
   snapid_t get_snap_following(snapid_t follows) {

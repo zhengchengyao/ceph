@@ -100,7 +100,7 @@ const set<snapid_t>& SnapRealm::get_snaps()
 {
   check_cache();
   dout(10) << "get_snaps " << cached_snaps
-	   << " (seq " << srnode.seq << " cached_seq " << cached_seq << ")"
+	   << " (seq " << srnode.seq << ")"
 	   << dendl;
   return cached_snaps;
 }
