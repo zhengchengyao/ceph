@@ -163,7 +163,6 @@ public:
   static const int PIN_FROZEN =           14;
   static const int PIN_IMPORTINGCAPS =   -15;
   static const int PIN_PASTSNAPPARENT =  -16;
-  static const int PIN_OPENINGSNAPPARENTS = 17;
   static const int PIN_TRUNCATING =       18;
   static const int PIN_STRAY =            19;  // we pin our stray inode while active
   static const int PIN_NEEDSNAPFLUSH =    20;
@@ -189,7 +188,6 @@ public:
     case PIN_IMPORTINGCAPS: return "importingcaps";
     case PIN_EXPORTINGCAPS: return "exportingcaps";
     case PIN_PASTSNAPPARENT: return "pastsnapparent";
-    case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
     case PIN_TRUNCATING: return "truncating";
     case PIN_STRAY: return "stray";
     case PIN_NEEDSNAPFLUSH: return "needsnapflush";
