@@ -5303,22 +5303,6 @@ bool MDCache::process_imported_caps()
   return false;
 }
 
-void MDCache::check_realm_past_parents(SnapRealm *realm, bool reconnect)
-{
-  // TODO: kill this function entirely as we work through things!
-  dout(10) << " have past snap parents for realm " << *realm 
-	   << " on " << *realm->inode << dendl;
-  if (reconnect) {
-    // finish off client snaprealm reconnects?
-    auto p = reconnected_snaprealms.find(realm->inode->ino());
-    if (p != reconnected_snaprealms.end()) {
-      for (auto q = p->second.begin(); q != p->second.end(); ++q)
-	finish_snaprealm_reconnect(q->first, realm, q->second);
-      reconnected_snaprealms.erase(p);
-    }
-  }
-}
-
 void MDCache::rebuild_need_snapflush(CInode *head_in, SnapRealm *realm,
 				     client_t client, snapid_t snap_follows)
 {
@@ -5387,7 +5371,12 @@ void MDCache::choose_lock_states_and_reconnect_caps()
 
     SnapRealm *realm = in->find_snaprealm();
 
-    check_realm_past_parents(realm, realm == in->snaprealm);
+    auto r = reconnected_snaprealms.find(realm->inode->ino());
+    if (r != reconnected_snaprealms.end()) {
+      for (auto s = r->second.begin(); s != r->second.end(); ++s)
+	finish_snaprealm_reconnect(s->first, realm, s->second);
+      reconnected_snaprealms.erase(r);
+    }
 
     if (p != reconnected_caps.end()) {
       // also, make sure client's cap is in the correct snaprealm.

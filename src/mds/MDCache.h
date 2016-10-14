@@ -599,7 +599,6 @@ public:
 		     int peer, int p_flags);
   void rebuild_need_snapflush(CInode *head_in, SnapRealm *realm, client_t client,
 			      snapid_t snap_follows);
-  void check_realm_past_parents(SnapRealm *realm, bool reconnect);
   void finish_snap_rejoin();
 
   bool open_undef_inodes_dirfrags();
