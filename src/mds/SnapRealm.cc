@@ -42,17 +42,6 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
   if (realm.srnode.created != realm.srnode.current_parent_since)
     out << " cps " << realm.srnode.current_parent_since;
   out << " snaps=" << realm.srnode.snaps;
-  if (realm.srnode.past_parents.size()) {
-    out << " past_parents=(";
-    for (map<snapid_t, snaplink_t>::const_iterator p = realm.srnode.past_parents.begin(); 
-	 p != realm.srnode.past_parents.end(); 
-	 ++p) {
-      if (p != realm.srnode.past_parents.begin()) out << ",";
-      out << p->second.first << "-" << p->first
-	  << "=" << p->second.ino;
-    }
-    out << ")";
-  }
   out << " " << &realm << ")";
   return out;
 }

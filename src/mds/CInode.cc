@@ -433,8 +433,6 @@ sr_t *CInode::project_snaprealm(snapid_t snapid)
   return new_srnode;
 }
 
-/* if newparent != parent, add parent to past_parents
- if parent DNE, we need to find what the parent actually is and fill that in */
 void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
 {
   sr_t *new_snap = project_snaprealm();
@@ -448,10 +446,12 @@ void CInode::project_past_snaprealm_parent(SnapRealm *newparent)
 
   if (newparent != oldparent) {
     snapid_t oldparentseq = oldparent->get_newest_seq();
+    /* TODO: I don't like this logic off-hand; verify it doesn't
+     * mean something's busted
     if (oldparentseq + 1 > new_snap->current_parent_since) {
       new_snap->past_parents[oldparentseq].ino = oldparent->inode->ino();
       new_snap->past_parents[oldparentseq].first = new_snap->current_parent_since;
-    }
+      } */
     new_snap->current_parent_since = MAX(oldparentseq, newparent->get_last_created()) + 1;
   }
 }
@@ -464,12 +464,11 @@ void CInode::pop_projected_snaprealm(sr_t *next_snaprealm)
   bool invalidate_cached_snaps = false;
   if (!snaprealm) {
     open_snaprealm();
-  } else if (next_snaprealm->past_parents.size() !=
-	     snaprealm->srnode.past_parents.size()) {
+  } else if (next_snaprealm->current_parent_since !=
+	     snaprealm->srnode.current_parent_since) {
     invalidate_cached_snaps = true;
     // re-open past parents
-    dout(10) << " realm " << *snaprealm << " past_parents " << snaprealm->srnode.past_parents
-	     << " -> " << next_snaprealm->past_parents << dendl;
+    dout(10) << " realm " << *snaprealm << " changed parent" << dendl;
   }
   snaprealm->srnode = *next_snaprealm;
   delete next_snaprealm;

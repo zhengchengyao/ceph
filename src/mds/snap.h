@@ -75,7 +75,6 @@ struct sr_t {
   snapid_t last_destroyed;          // upper bound of system snapid on last purge; unrelated to seq
   snapid_t current_parent_since;
   map<snapid_t, SnapInfo> snaps;
-  map<snapid_t, snaplink_t> past_parents;  // key is "last" (or NOSNAP)
 
   sr_t()
     : seq(0), created(0),

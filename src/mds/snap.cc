@@ -121,20 +121,21 @@ ostream& operator<<(ostream& out, const snaplink_t &l)
 
 void sr_t::encode(bufferlist& bl) const
 {
-  ENCODE_START(4, 4, bl);
+  ENCODE_START(5, 4, bl);
   ::encode(seq, bl);
   ::encode(created, bl);
   ::encode(last_created, bl);
   ::encode(last_destroyed, bl);
   ::encode(current_parent_since, bl);
   ::encode(snaps, bl);
-  ::encode(past_parents, bl);
+  map<snapid_t,snaplink_t> i_was_past_parents;
+  ::encode(i_was_past_parents, bl);
   ENCODE_FINISH(bl);
 }
 
 void sr_t::decode(bufferlist::iterator& p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(4, 4, 4, p);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
   if (struct_v == 2) {
     __u8 struct_v;
     ::decode(struct_v, p);  // yes, really: extra byte for v2 encoding only, see 6ee52e7d.
@@ -145,7 +146,14 @@ void sr_t::decode(bufferlist::iterator& p)
   ::decode(last_destroyed, p);
   ::decode(current_parent_since, p);
   ::decode(snaps, p);
+  map<snapid_t,snaplink_t> past_parents;
   ::decode(past_parents, p);
+  if (struct_v >= 5) {
+    assert(past_parents.empty());
+  } else {
+    // it's object corpus testing code with these magic numbers
+    assert(past_parents[12].ino == 12 && past_parents[12].first == 3);
+  }
   DECODE_FINISH(p);
 }
 
@@ -160,15 +168,6 @@ void sr_t::dump(Formatter *f) const
   f->open_array_section("snaps");
   for (map<snapid_t,SnapInfo>::const_iterator p = snaps.begin(); p != snaps.end(); ++p) {
     f->open_object_section("snapinfo");
-    f->dump_unsigned("last", p->first);
-    p->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-
-  f->open_array_section("past_parents");
-  for (map<snapid_t,snaplink_t>::const_iterator p = past_parents.begin(); p != past_parents.end(); ++p) {
-    f->open_object_section("past_parent");
     f->dump_unsigned("last", p->first);
     p->second.dump(f);
     f->close_section();
@@ -189,7 +188,5 @@ void sr_t::generate_test_instances(list<sr_t*>& ls)
   ls.back()->snaps[123].ino = 8;
   ls.back()->snaps[123].stamp = utime_t(9, 10);
   ls.back()->snaps[123].name = "name1";
-  ls.back()->past_parents[12].ino = 12;
-  ls.back()->past_parents[12].first = 3;
 }
 
