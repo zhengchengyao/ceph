@@ -24,7 +24,6 @@
 
 struct SnapRealm {
   // realm state
-
   sr_t srnode;
 
   // in-memory state
@@ -37,7 +36,6 @@ struct SnapRealm {
 
   // cache
   snapid_t cached_seq;           // max seq over self and all past+present parents.
-  snapid_t cached_last_created;  // max last_created over all past+present parents
   set<snapid_t> cached_snaps;
   SnapContext cached_snap_context;
 
@@ -68,8 +66,7 @@ struct SnapRealm {
     return !srnode.snaps.empty();
   }
 
-  void build_snap_set(set<snapid_t>& s, 
-		      snapid_t& max_seq, snapid_t& max_last_created);
+  void build_snap_set(set<snapid_t>& s, snapid_t& max_seq);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const bufferlist& get_snap_trace();
@@ -84,8 +81,7 @@ struct SnapRealm {
     cached_seq = 0;
   }
   snapid_t get_last_created() {
-    check_cache();
-    return cached_last_created;
+    return srnode.last_created;
   }
   snapid_t get_last_destroyed() {
     return srnode.last_destroyed;
