@@ -594,19 +594,13 @@ public:
   void try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
 
-  // cap imports.  delayed snap parent opens.
-  //  realm inode -> client -> cap inodes needing to split to this realm
-  map<CInode*,set<CInode*> > missing_snap_parents;
-  map<client_t,set<CInode*> > delayed_imported_caps;
-
   void do_cap_import(Session *session, CInode *in, Capability *cap,
 		     uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 		     int peer, int p_flags);
-  void do_delayed_cap_imports();
   void rebuild_need_snapflush(CInode *head_in, SnapRealm *realm, client_t client,
 			      snapid_t snap_follows);
   void check_realm_past_parents(SnapRealm *realm, bool reconnect);
-  void open_snap_parents();
+  void finish_snap_rejoin();
 
   bool open_undef_inodes_dirfrags();
   void opened_undef_inode(CInode *in);

@@ -5092,7 +5092,7 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
     if (rejoin_gather.empty() &&     // make sure we've gotten our FULL inodes, too.
 	rejoin_ack_gather.empty()) {
       // finally, kickstart past snap parent opens
-      open_snap_parents();
+      finish_snap_rejoin();
     } else {
       dout(7) << "still need rejoin from (" << rejoin_gather << ")"
 	      << ", rejoin_ack from (" << rejoin_ack_gather << ")" << dendl;
@@ -5126,7 +5126,7 @@ void MDCache::rejoin_gather_finish()
   // did we already get our acks too?
   if (rejoin_ack_gather.empty()) {
     // finally, kickstart past snap parent opens
-    open_snap_parents();
+    finish_snap_rejoin();
   }
 }
 
@@ -5600,94 +5600,31 @@ void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
   mds->send_message_client_counted(reap, session);
 }
 
-void MDCache::do_delayed_cap_imports()
+void MDCache::finish_snap_rejoin()
 {
-  dout(10) << "do_delayed_cap_imports" << dendl;
-
-  assert(delayed_imported_caps.empty());
-}
-
-struct C_MDC_OpenSnapParents : public MDCacheContext {
-  explicit C_MDC_OpenSnapParents(MDCache *c) : MDCacheContext(c) {}
-  void finish(int r) {
-    mdcache->open_snap_parents();
-  }
-};
-
-void MDCache::open_snap_parents()
-{
-  dout(10) << "open_snap_parents" << dendl;
+  dout(10) << __func__ << dendl;
   
-  map<client_t,MClientSnap*> splits;
-  MDSGatherBuilder gather(g_ceph_context);
-
-  auto p = missing_snap_parents.begin();
-  while (p != missing_snap_parents.end()) {
-    CInode *in = p->first;
-    assert(in->snaprealm);
-    dout(10) << " past parents now open on " << *in << dendl;
-
-    for (CInode *child : p->second) {
-      auto q = reconnected_caps.find(child->ino());
-      assert(q != reconnected_caps.end());
-      for (auto r = q->second.begin(); r != q->second.end(); ++r) {
-	if (r->second.snap_follows > 0 && r->second.snap_follows < in->first - 1) {
-	  rebuild_need_snapflush(child, in->snaprealm, r->first, r->second.snap_follows);
-	}
-	// make sure client's cap is in the correct snaprealm.
-	if (r->second.realm_ino != in->ino()) {
-	  prepare_realm_split(in->snaprealm, r->first, child->ino(), splits);
-	}
-      }
+  if (!reconnected_snaprealms.empty()) {
+    stringstream warn_str;
+    for (map<inodeno_t,map<client_t,snapid_t> >::iterator p = reconnected_snaprealms.begin();
+	 p != reconnected_snaprealms.end();
+	 ++p) {
+      warn_str << " unconnected snaprealm " << p->first << "\n";
+      for (map<client_t,snapid_t>::iterator q = p->second.begin();
+	   q != p->second.end();
+	   ++q)
+	warn_str << "  client." << q->first << " snapid " << q->second << "\n";
     }
-
-    missing_snap_parents.erase(p++);
-
-    in->put(CInode::PIN_OPENINGSNAPPARENTS);
-
-    // finish off client snaprealm reconnects?
-    map<inodeno_t,map<client_t,snapid_t> >::iterator q = reconnected_snaprealms.find(in->ino());
-    if (q != reconnected_snaprealms.end()) {
-      for (map<client_t,snapid_t>::iterator r = q->second.begin();
-	   r != q->second.end();
-	   ++r)
-	finish_snaprealm_reconnect(r->first, in->snaprealm, r->second);
-      reconnected_snaprealms.erase(q);
-    }
+    mds->clog->warn() << "finish_snap_rejoin has:" << "\n";
+    mds->clog->warn(warn_str);
   }
+  assert(rejoin_waiters.empty());
+  dout(10) << "finish_snap_rejoin - all open" << dendl;
 
-  send_snaps(splits);
-
-  if (gather.has_subs()) {
-    dout(10) << "open_snap_parents - waiting for "
-	     << gather.num_subs_remaining() << dendl;
-    gather.set_finisher(new C_MDC_OpenSnapParents(this));
-    gather.activate();
-  } else {
-    if (!reconnected_snaprealms.empty()) {
-      stringstream warn_str;
-      for (map<inodeno_t,map<client_t,snapid_t> >::iterator p = reconnected_snaprealms.begin();
-	   p != reconnected_snaprealms.end();
-	   ++p) {
-	warn_str << " unconnected snaprealm " << p->first << "\n";
-	for (map<client_t,snapid_t>::iterator q = p->second.begin();
-	     q != p->second.end();
-	     ++q)
-	  warn_str << "  client." << q->first << " snapid " << q->second << "\n";
-      }
-      mds->clog->warn() << "open_snap_parents has:" << "\n";
-      mds->clog->warn(warn_str);
-    }
-    assert(rejoin_waiters.empty());
-    assert(missing_snap_parents.empty());
-    dout(10) << "open_snap_parents - all open" << dendl;
-    do_delayed_cap_imports();
-
-    assert(rejoin_done != NULL);
-    rejoin_done->complete(0);
-    rejoin_done = NULL;
-    reconnected_caps.clear();
-  }
+  assert(rejoin_done != NULL);
+  rejoin_done->complete(0);
+  rejoin_done = NULL;
+  reconnected_caps.clear();
 }
 
 bool MDCache::open_undef_inodes_dirfrags()
