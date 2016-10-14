@@ -62,19 +62,17 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
  * for the intervals during which they were our parent.
  */
 void SnapRealm::build_snap_set(set<snapid_t> &s,
-			       snapid_t& max_seq, snapid_t& max_last_created,
-			       snapid_t first, snapid_t last)
+			       snapid_t& max_seq, snapid_t& max_last_created)
 {
-  dout(10) << "build_snap_set [" << first << "," << last << "] on " << *this << dendl;
+  dout(10) << "build_snap_set on " << *this << dendl;
 
   if (srnode.seq > max_seq)
     max_seq = srnode.seq;
   if (srnode.last_created > max_last_created)
     max_last_created = srnode.last_created;
 
-  // include my snaps within interval [first,last]
-  for (map<snapid_t, SnapInfo>::iterator p = srnode.snaps.lower_bound(first); // first element >= first
-       p != srnode.snaps.end() && p->first <= last;
+  for (map<snapid_t, SnapInfo>::iterator p = srnode.snaps.begin();
+       p != srnode.snaps.end();
        ++p)
     s.insert(p->first);
 }
@@ -90,8 +88,7 @@ void SnapRealm::check_cache()
 
   cached_last_created = srnode.last_created;
   cached_seq = srnode.seq;
-  build_snap_set(cached_snaps, cached_seq, cached_last_created,
-		 0, CEPH_NOSNAP);
+  build_snap_set(cached_snaps, cached_seq, cached_last_created);
 
   cached_snap_trace.clear();
   build_snap_trace(cached_snap_trace);

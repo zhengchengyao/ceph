@@ -69,8 +69,7 @@ struct SnapRealm {
   }
 
   void build_snap_set(set<snapid_t>& s, 
-		      snapid_t& max_seq, snapid_t& max_last_created,
-		      snapid_t first, snapid_t last);
+		      snapid_t& max_seq, snapid_t& max_last_created);
   void get_snap_info(map<snapid_t,SnapInfo*>& infomap, snapid_t first=0, snapid_t last=CEPH_NOSNAP);
 
   const bufferlist& get_snap_trace();
