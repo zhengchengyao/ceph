@@ -8986,7 +8986,8 @@ void MDCache::snaprealm_create(MDRequestRef& mdr, CInode *in)
 }
 
 
-void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend)
+void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool nosend,
+						    snapid_t removed, snapid_t removed_v)
 {
   dout(10) << "do_realm_invalidate_and_update_notify " << *in->snaprealm << " " << *in << dendl;
 
@@ -9018,6 +9019,9 @@ void MDCache::do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool
     dout(10) << " realm " << *realm << " on " << *realm->inode << dendl;
     realm->invalidate_cached_snaps();
     // this invokes on local "root" too, but that's okay
+    if (snapop == CEPH_SNAP_OP_DESTROY) {
+      realm->prune_deleted_snaps(removed, removed_v);
+    }
     realm->merge_snaps_from(realm->parent);
 
     for (map<client_t, xlist<Capability*>* >::iterator p = realm->client_caps.begin();
