@@ -8392,20 +8392,6 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   if (!check_access(mdr, diri, MAY_WRITE))
     return;
 
-    // prepare
-  if (!mdr->more()->stid) {
-    mds->snapclient->prepare_update(diri->ino(), snapid, dstname, utime_t(),
-				    &mdr->more()->stid, &mdr->more()->snapidbl,
-				    new C_MDS_RetryRequest(mdcache, mdr));
-    return;
-  }
-
-  version_t stid = mdr->more()->stid;
-  bufferlist::iterator p = mdr->more()->snapidbl.begin();
-  snapid_t seq;
-  ::decode(seq, p);
-  dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
-
   // journal
   inode_t *pi = diri->project_inode();
   pi->ctime = mdr->get_op_stamp();
@@ -8422,7 +8408,6 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   mdlog->start_entry(le);
 
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
-  le->metablob.add_table_transaction(TABLE_SNAP, stid);
   mdcache->predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY, false);
   mdcache->journal_dirty_inode(mdr.get(), &le->metablob, diri);
 
@@ -8438,8 +8423,6 @@ void Server::_renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid
 
   diri->pop_and_dirty_projected_inode(mdr->ls);
   mdr->apply();
-
-  mds->snapclient->commit(mdr->more()->stid, mdr->ls);
 
   dout(10) << "snaprealm now " << *diri->snaprealm << dendl;
 
