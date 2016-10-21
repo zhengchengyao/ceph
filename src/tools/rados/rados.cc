@@ -46,6 +46,7 @@ using namespace libradosstriper;
 
 #include "cls/lock/cls_lock_client.h"
 #include "include/compat.h"
+#include "include/util.h"
 #include "common/hobject.h"
 
 #include "PoolDump.h"
@@ -149,6 +150,9 @@ void usage(ostream& out)
 "   list-inconsistent-pg <pool>      list inconsistent PGs in given pool\n"
 "   list-inconsistent-obj <pgid>     list inconsistent objects in given pg\n"
 "   list-inconsistent-snapset <pgid> list inconsistent snapsets in the given pg\n"
+"   repair-get [--force] <obj-name> <osdid> <epoch> [outfile]\n"
+"                                    fetch a particular shard/replica of an object\n"
+"                                    --force ignores EIO and returns whatever data it can\n"
 "\n"
 "CACHE POOLS: (for testing/development only)\n"
 "   cache-flush <obj-name>           flush cache pool object (blocking)\n"
@@ -315,6 +319,51 @@ static int do_get(IoCtx& io_ctx, RadosStriper& striper,
 
  out:
   if (fd != 1)
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return ret;
+}
+
+static int do_repair_get(IoCtx& io_ctx, const char *objname,
+	const char *outfile, unsigned op_size, int32_t osdid, epoch_t epoch,
+	bool force)
+{
+  string oid(objname);
+
+  int fd;
+  if (strcmp(outfile, "-") == 0) {
+    fd = STDOUT_FILENO;
+  } else {
+    fd = TEMP_FAILURE_RETRY(::open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0644));
+    if (fd < 0) {
+      int err = errno;
+      cerr << "failed to open file: " << cpp_strerror(err) << std::endl;
+      return -err;
+    }
+  }
+
+  uint64_t offset = 0;
+  int ret = 0;
+  while (true) {
+    bufferlist outdata;
+    int flags = 0;
+    if (force) flags |= LIBRADOS_OP_FLAG_FAILOK;
+    ret = io_ctx.repair_read(oid, outdata, op_size, offset, flags, osdid, epoch);
+    if (ret <= 0) {
+      if (ret == -EINVAL)
+	cerr << "Specified epoch does not match scrub interval" << std::endl;
+      break;
+    }
+    ret = outdata.write_fd(fd);
+    if (ret < 0) {
+      cerr << "error writing to file: " << cpp_strerror(ret) << std::endl;
+      break;
+    }
+    if (outdata.length() < op_size)
+      break;
+    offset += outdata.length();
+  }
+
+  if (fd != STDOUT_FILENO)
     VOID_TEMP_FAILURE_RETRY(::close(fd));
   return ret;
 }
@@ -1284,19 +1333,43 @@ static int do_get_inconsistent_pg_cmd(const std::vector<const char*> &nargs,
   return 0;
 }
 
+static void dump_errors(const err_t &err, Formatter &f, const char *name)
+{
+  f.open_array_section(name);
+  if (err.has_shard_missing())
+    f.dump_string("error", "missing");
+  if (err.has_stat_error())
+    f.dump_string("error", "stat_error");
+  if (err.has_read_error())
+    f.dump_string("error", "read_error");
+  if (err.has_data_digest_mismatch_oi())
+    f.dump_string("error", "data_digest_mismatch_oi");
+  if (err.has_omap_digest_mismatch_oi())
+    f.dump_string("error", "omap_digest_mismatch_oi");
+  if (err.has_size_mismatch_oi())
+    f.dump_string("error", "size_mismatch_oi");
+  if (err.has_ec_hash_error())
+    f.dump_string("error", "ec_hash_error");
+  if (err.has_ec_size_error())
+    f.dump_string("error", "ec_size_error");
+  if (err.has_oi_attr_missing())
+    f.dump_string("error", "oi_attr_missing");
+  if (err.has_oi_attr_corrupted())
+    f.dump_string("error", "oi_attr_corrupted");
+  f.close_section();
+}
+
 static void dump_shard(const shard_info_t& shard,
 		       const inconsistent_obj_t& inc,
 		       Formatter &f)
 {
-  // A missing shard just has that error and nothing else
-  if (shard.has_shard_missing()) {
-    f.open_array_section("errors");
-    f.dump_string("error", "missing");
-    f.close_section();
-    return;
-  }
+  dump_errors(shard, f, "errors");
 
-  f.dump_unsigned("size", shard.size);
+  if (shard.has_shard_missing())
+    return;
+
+  if (!shard.has_stat_error())
+    f.dump_unsigned("size", shard.size);
   if (shard.omap_digest_present) {
     f.dump_format("omap_digest", "0x%08x", shard.omap_digest);
   }
@@ -1304,42 +1377,46 @@ static void dump_shard(const shard_info_t& shard,
     f.dump_format("data_digest", "0x%08x", shard.data_digest);
   }
 
-  f.open_array_section("errors");
-  if (shard.has_read_error())
-    f.dump_string("error", "read_error");
-  if (shard.has_data_digest_mismatch())
-    f.dump_string("error", "data_digest_mismatch");
-  if (shard.has_omap_digest_mismatch())
-    f.dump_string("error", "omap_digest_mismatch");
-  if (shard.has_size_mismatch())
-    f.dump_string("error", "size_mismatch");
-  if (!shard.has_read_error()) {
-    if (shard.has_data_digest_mismatch_oi())
-      f.dump_string("error", "data_digest_mismatch_oi");
-    if (shard.has_omap_digest_mismatch_oi())
-      f.dump_string("error", "omap_digest_mismatch_oi");
-    if (shard.has_size_mismatch_oi())
-      f.dump_string("error", "size_mismatch_oi");
+  if (!shard.has_oi_attr_missing() && !shard.has_oi_attr_corrupted() &&
+      inc.has_object_info_inconsistency()) {
+    object_info_t oi;
+    bufferlist bl;
+    map<std::string, ceph::bufferlist>::iterator k = (const_cast<shard_info_t&>(shard)).attrs.find(OI_ATTR);
+    assert(k != shard.attrs.end()); // Can't be missing
+    bufferlist::iterator bliter = k->second.begin();
+    ::decode(oi, bliter);  // Can't be corrupted
+    f.dump_stream("object_info") << oi;
   }
-  if (shard.has_attr_missing())
-    f.dump_string("error", "attr_missing");
-  if (shard.has_attr_unexpected())
-    f.dump_string("error", "attr_unexpected");
-  f.close_section();
-
-  if (inc.has_attr_mismatch()) {
-    f.open_object_section("attrs");
+  if (inc.has_attr_name_mismatch() || inc.has_attr_value_mismatch()) {
+    f.open_array_section("attrs");
     for (auto kv : shard.attrs) {
       f.open_object_section("attr");
       f.dump_string("name", kv.first);
-      bufferlist b64;
-      kv.second.encode_base64(b64);
-      string v(b64.c_str(), b64.length());
-      f.dump_string("value", v);
+      bool b64;
+      f.dump_string("value", cleanbin(kv.second, b64));
+      f.dump_bool("Base64", b64);
       f.close_section();
     }
     f.close_section();
   }
+}
+
+static void dump_obj_errors(const obj_err_t &err, Formatter &f)
+{
+  f.open_array_section("errors");
+  if (err.has_object_info_inconsistency())
+    f.dump_string("error", "object_info_inconsistency");
+  if (err.has_data_digest_mismatch())
+    f.dump_string("error", "data_digest_mismatch");
+  if (err.has_omap_digest_mismatch())
+    f.dump_string("error", "omap_digest_mismatch");
+  if (err.has_size_mismatch())
+    f.dump_string("error", "size_mismatch");
+  if (err.has_attr_value_mismatch())
+    f.dump_string("error", "attr_value_mismatch");
+  if (err.has_attr_name_mismatch())
+    f.dump_string("error", "attr_name_mismatch");
+  f.close_section();
 }
 
 static void dump_object_id(const object_id_t& object,
@@ -1366,32 +1443,33 @@ static void dump_inconsistent(const inconsistent_obj_t& inc,
 {
   f.open_object_section("object");
   dump_object_id(inc.object, f);
+  f.dump_unsigned("version", inc.version);
   f.close_section();
 
-  f.open_array_section("errors");
-  if (inc.has_attr_unexpected())
-    f.dump_string("error", "attr_unexpected");
-  if (inc.has_shard_missing())
-    f.dump_string("error", "missing");
-  if (inc.has_stat_error())
-    f.dump_string("error", "stat_error");
-  if (inc.has_read_error())
-    f.dump_string("error", "read_error");
-  if (inc.has_data_digest_mismatch())
-    f.dump_string("error", "data_digest_mismatch");
-  if (inc.has_omap_digest_mismatch())
-    f.dump_string("error", "omap_digest_mismatch");
-  if (inc.has_size_mismatch())
-    f.dump_string("error", "size_mismatch");
-  if (inc.has_attr_mismatch())
-    f.dump_string("error", "attr_mismatch");
-  f.close_section();
-
+  dump_obj_errors(inc, f);
+  dump_errors(inc.union_shards, f, "union_shard_errors");
+  for (const auto& shard_info : inc.shards) {
+    shard_info_t shard = const_cast<shard_info_t&>(shard_info.second);
+    if (shard.selected_oi) {
+      object_info_t oi;
+      bufferlist bl;
+      map<std::string, ceph::bufferlist>::iterator k = shard.attrs.find(OI_ATTR);
+      assert(k != shard.attrs.end()); // Can't be missing
+      bufferlist::iterator bliter = k->second.begin();
+      ::decode(oi, bliter);  // Can't be corrupted
+      f.dump_stream("selected_object_info") << oi;
+      break;
+    }
+  }
   f.open_array_section("shards");
-  for (auto osd_shard : inc.shards) {
+  for (const auto& shard_info : inc.shards) {
     f.open_object_section("shard");
-    f.dump_int("osd", osd_shard.first);
-    dump_shard(osd_shard.second, inc, f);
+    auto& osd_shard = shard_info.first;
+    f.dump_int("osd", osd_shard.osd);
+    auto shard = osd_shard.shard;
+    if (shard != shard_id_t::NO_SHARD)
+      f.dump_unsigned("shard", shard);
+    dump_shard(shard_info.second, inc, f);
     f.close_section();
   }
   f.close_section();
@@ -1484,7 +1562,6 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
   }
   uint32_t interval = 0, first_interval = 0;
   const unsigned max_item_num = 32;
-  bool opened = false;
   for (librados::object_id_t start;;) {
     std::vector<T> items;
     auto completion = librados::Rados::aio_create_completion();
@@ -1510,7 +1587,6 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
       formatter.open_object_section("info");
       formatter.dump_int("epoch", interval);
       formatter.open_array_section("inconsistents");
-      opened = true;
     }
     for (auto& inc : items) {
       formatter.open_object_section("inconsistent");
@@ -1519,16 +1595,14 @@ static int do_get_inconsistent_cmd(const std::vector<const char*> &nargs,
     }
     if (items.size() < max_item_num) {
       formatter.close_section();
+      formatter.close_section();
+      formatter.flush(cout);
       break;
     }
     if (!items.empty()) {
       start = items.back().object;
     }
     items.clear();
-  }
-  if (opened) {
-    formatter.close_section();
-    formatter.flush(cout);
   }
   return ret;
 }
@@ -1575,6 +1649,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   std::string run_name;
   std::string prefix;
   bool forcefull = false;
+  bool force = false;
   Formatter *formatter = NULL;
   bool pretty_format = false;
   const char *output = NULL;
@@ -1621,6 +1696,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("force-full");
   if (i != opts.end()) {
     forcefull = true;
+  }
+  i = opts.find("force");
+  if (i != opts.end()) {
+    force = true;
   }
   i = opts.find("prefix");
   if (i != opts.end()) {
@@ -2135,6 +2214,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = do_get(io_ctx, striper, nargs[1], nargs[2], op_size, use_striper);
     if (ret < 0) {
       cerr << "error getting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
+      goto out;
+    }
+  }
+  else if (strcmp(nargs[0], "repair-get") == 0) {
+    if (!pool_name || nargs.size() < 5)
+      usage_exit();
+    if (use_striper) {
+      cerr << "Specifing striper not allowed for repair-get operation" << std::endl;
+      goto out;
+    }
+    int32_t osdid = atoi(nargs[2]);
+    epoch_t e = atoi(nargs[3]);
+    ret = do_repair_get(io_ctx, nargs[1], nargs[4], op_size, osdid, e, force);
+    if (ret < 0) {
+      cerr << "error getting shard from osd " << osdid << " of " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       goto out;
     }
   }

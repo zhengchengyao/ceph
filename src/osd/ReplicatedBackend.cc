@@ -789,7 +789,8 @@ void ReplicatedBackend::be_deep_scrub(
   ScrubMap::object &o,
   ThreadPool::TPHandle &handle)
 {
-  dout(10) << __func__ << " " << poid << " seed " << seed << dendl;
+  dout(10) << __func__ << " " << poid << " seed " 
+	   << std::hex << seed << std::dec << dendl;
   bufferhash h(seed), oh(seed);
   bufferlist bl, hdrbl;
   int r;
@@ -1483,7 +1484,7 @@ void ReplicatedBackend::prepare_pull(
 
   dout(7) << "pull " << soid
 	  << " v " << v
-	  << " on osds " << *p
+	  << " on osds " << q->second
 	  << " from osd." << fromshard
 	  << dendl;
 
@@ -2426,7 +2427,8 @@ void ReplicatedBackend::sub_op_push(OpRequestRef op)
 
 void ReplicatedBackend::_failed_push(pg_shard_t from, const hobject_t &soid)
 {
-  get_parent()->failed_push(from, soid);
+  list<pg_shard_t> fl = { from };
+  get_parent()->failed_push(fl, soid);
   pull_from_peer[from].erase(soid);
   if (pull_from_peer[from].empty())
     pull_from_peer.erase(from);

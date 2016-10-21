@@ -54,6 +54,7 @@ const char *ceph_osd_flag_name(unsigned flag)
   case CEPH_OSD_FLAG_KNOWN_REDIR: return "known_if_redirected";
   case CEPH_OSD_FLAG_FULL_TRY: return "full_try";
   case CEPH_OSD_FLAG_FULL_FORCE: return "full_force";
+  case CEPH_OSD_FLAG_REPAIR_READS: return "repair_reads";
   default: return "???";
   }
 }
@@ -5128,7 +5129,8 @@ void ScrubMap::generate_test_instances(list<ScrubMap*>& o)
 
 void ScrubMap::object::encode(bufferlist& bl) const
 {
-  ENCODE_START(7, 2, bl);
+  bool compat_read_error = read_error || ec_hash_mismatch || ec_size_mismatch;
+  ENCODE_START(8, 2, bl);
   ::encode(size, bl);
   ::encode(negative, bl);
   ::encode(attrs, bl);
@@ -5138,16 +5140,19 @@ void ScrubMap::object::encode(bufferlist& bl) const
   ::encode(snapcolls, bl);
   ::encode(omap_digest, bl);
   ::encode(omap_digest_present, bl);
-  ::encode(read_error, bl);
+  ::encode(compat_read_error, bl);
   ::encode(stat_error, bl);
+  ::encode(read_error, bl);
+  ::encode(ec_hash_mismatch, bl);
+  ::encode(ec_size_mismatch, bl);
   ENCODE_FINISH(bl);
 }
 
 void ScrubMap::object::decode(bufferlist::iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(7, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(8, 2, 2, bl);
   ::decode(size, bl);
-  bool tmp;
+  bool tmp, compat_read_error = false;
   ::decode(tmp, bl);
   negative = tmp;
   ::decode(attrs, bl);
@@ -5170,13 +5175,23 @@ void ScrubMap::object::decode(bufferlist::iterator& bl)
     omap_digest_present = tmp;
   }
   if (struct_v >= 6) {
-    ::decode(tmp, bl);
-    read_error = tmp;
+    ::decode(compat_read_error, bl);
   }
   if (struct_v >= 7) {
     ::decode(tmp, bl);
     stat_error = tmp;
   }
+  if (struct_v >= 8) {
+    ::decode(tmp, bl);
+    read_error = tmp;
+    ::decode(tmp, bl);
+    ec_hash_mismatch = tmp;
+    ::decode(tmp, bl);
+    ec_size_mismatch = tmp;
+  }
+  // If older encoder found a read_error, set read_error
+  if (compat_read_error && !read_error && !ec_hash_mismatch && !ec_size_mismatch)
+    read_error = true;
   DECODE_FINISH(bl);
 }
 
@@ -5257,6 +5272,9 @@ ostream& operator<<(ostream& out, const OSDOp& op)
     case CEPH_OSD_OP_SETALLOCHINT:
       out << " object_size " << op.op.alloc_hint.expected_object_size
           << " write_size " << op.op.alloc_hint.expected_write_size;
+      break;
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      out << " e" << op.op.assert_interval.epoch;
       break;
     default:
       out << " " << op.op.extent.offset << "~" << op.op.extent.length;

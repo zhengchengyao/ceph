@@ -3841,8 +3841,12 @@ void PG::repair_object(
   const hobject_t& soid, list<pair<ScrubMap::object, pg_shard_t> > *ok_peers,
   pg_shard_t bad_peer)
 {
+  list<pg_shard_t> op_shards;
+  for (auto i : *ok_peers) {
+    op_shards.push_back(i.second);
+  }
   dout(10) << "repair_object " << soid << " bad_peer osd."
-	   << bad_peer << " ok_peers osd.{" << ok_peers << "}" << dendl;
+	   << bad_peer << " ok_peers osd.{" << op_shards << "}" << dendl;
   ScrubMap::object &po = ok_peers->back().first;
   eversion_t v;
   bufferlist bv;
@@ -4438,7 +4442,7 @@ void PG::scrub_compare_maps()
   }
 
   // ok, do the pg-type specific scrubbing
-  _scrub(for_meta_scrub, missing_digest);
+  scrub_snapshot_metadata(for_meta_scrub, missing_digest);
   if (!scrubber.store->empty()) {
     if (state_test(PG_STATE_REPAIR)) {
       dout(10) << __func__ << ": discarding scrub results" << dendl;
@@ -5329,7 +5333,9 @@ bool PG::can_discard_op(OpRequestRef& op)
     return true;
   }
 
-  if (m->get_map_epoch() < pool.info.last_force_op_resend &&
+  // Don't care about last_force_op_resend for recovery reads
+  if (!(m->get_flags() & CEPH_OSD_FLAG_REPAIR_READS) &&
+      m->get_map_epoch() < pool.info.last_force_op_resend &&
       m->get_connection()->has_feature(CEPH_FEATURE_OSD_POOLRESEND)) {
     dout(7) << __func__ << " sent before last_force_op_resend "
 	    << pool.info.last_force_op_resend << ", dropping" << *m << dendl;

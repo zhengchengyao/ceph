@@ -1736,7 +1736,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
   }
 
   if ((m->get_flags() & (CEPH_OSD_FLAG_BALANCE_READS |
-			 CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+			 CEPH_OSD_FLAG_LOCALIZE_READS |
+			 CEPH_OSD_FLAG_REPAIR_READS)) &&
       op->may_read() &&
       !(op->may_write() || op->may_cache())) {
     // balanced reads; any replica will do
@@ -1994,7 +1995,8 @@ void ReplicatedPG::do_op(OpRequestRef& op)
     // we have to wait for the object.
     if (is_primary() ||
 	(!(m->has_flag(CEPH_OSD_FLAG_BALANCE_READS)) &&
-	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)))) {
+	 !(m->has_flag(CEPH_OSD_FLAG_LOCALIZE_READS)) &&
+	 !(m->has_flag(CEPH_OSD_FLAG_REPAIR_READS)))) {
       // missing the specific snap we need; requeue and wait.
       assert(!op->may_write()); // only happens on a read/cache
       wait_for_unreadable_object(missing_oid, op);
@@ -2342,7 +2344,7 @@ ReplicatedPG::cache_result_t ReplicatedPG::maybe_handle_cache_detail(
       op->get_req() &&
       op->get_req()->get_type() == CEPH_MSG_OSD_OP &&
       (static_cast<MOSDOp *>(op->get_req())->get_flags() &
-       CEPH_OSD_FLAG_IGNORE_CACHE)) {
+       (CEPH_OSD_FLAG_IGNORE_CACHE|CEPH_OSD_FLAG_REPAIR_READS))) {
     dout(20) << __func__ << ": ignoring cache due to flag" << dendl;
     return cache_result_t::NOOP;
   }
@@ -6174,6 +6176,23 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+    case CEPH_OSD_OP_ASSERT_INTERVAL:
+      ++ctx->num_read;
+      {
+	epoch_t epoch = op.assert_interval.epoch;
+	epoch_t pg_epoch = get_epoch();
+	tracepoint(osd, do_osd_op_pre_assert_interval, soid.oid.name.c_str(), soid.snap.val, epoch);
+	dout(5) << "Check interval " << soid << " epoch " << epoch << " pg epoch " << pg_epoch << dendl;
+	if (epoch > pg_epoch) {
+	  result = -ERANGE;
+	  break;
+	}
+	if (pg_has_reset_since(epoch)) {
+	  result = -EINVAL;
+	}
+      }
+      break;
+
     default:
       tracepoint(osd, do_osd_op_pre_unknown, soid.oid.name.c_str(), soid.snap.val, op.op, ceph_osd_op_name(op.op));
       dout(1) << "unrecognized osd op " << op.op
@@ -8831,7 +8850,7 @@ void ReplicatedPG::submit_log_entries(
   ObcLockManager &&manager,
   boost::optional<std::function<void(void)> > &&on_complete)
 {
-  dout(10) << __func__ << entries << dendl;
+  dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
   ObjectStore::Transaction t;
@@ -9188,7 +9207,14 @@ ObjectContextRef ReplicatedPG::get_object_context(const hobject_t& soid,
       }
     }
 
-    object_info_t oi(bv);
+    object_info_t oi;
+    try {
+      bufferlist::iterator bliter = bv.begin();
+      ::decode(oi, bliter);
+    } catch (...) {
+      dout(0) << __func__ << ": obc corrupt: " << soid << dendl;
+      return ObjectContextRef();   // -ENOENT!
+    }
 
     assert(oi.soid.pool == (int64_t)info.pgid.pool());
 
@@ -9824,13 +9850,13 @@ void ReplicatedPG::recover_got(hobject_t oid, eversion_t v)
   }
 }
 
-
-void ReplicatedPG::failed_push(pg_shard_t from, const hobject_t &soid)
+void ReplicatedPG::failed_push(const list<pg_shard_t> &from, const hobject_t &soid)
 {
   assert(recovering.count(soid));
   recovering.erase(soid);
-  missing_loc.remove_location(soid, from);
-  dout(0) << "_failed_push " << soid << " from shard " << from
+  for (list<pg_shard_t>::const_iterator i = from.begin(); i != from.end() ; ++i)
+    missing_loc.remove_location(soid, *i);
+  dout(0) << __func__ << " " << soid << " from shard " << from
 	  << ", reps on " << missing_loc.get_locations(soid)
 	  << " unfound? " << missing_loc.is_unfound(soid) << dendl;
   finish_recovery_op(soid);  // close out this attempt,
@@ -10041,6 +10067,7 @@ void ReplicatedPG::mark_all_unfound_lost(
       [=]() {
 	requeue_ops(waiting_for_all_missing);
 	waiting_for_all_missing.clear();
+	requeue_object_waiters(waiting_for_unreadable_object);
 	queue_recovery();
 
 	stringstream ss;
@@ -10425,7 +10452,7 @@ void ReplicatedPG::_clear_recovery_state()
 
 void ReplicatedPG::cancel_pull(const hobject_t &soid)
 {
-  dout(20) << __func__ << ": soid" << dendl;
+  dout(20) << __func__ << ": " << soid << dendl;
   assert(recovering.count(soid));
   ObjectContextRef obc = recovering[soid];
   if (obc) {
@@ -12773,11 +12800,11 @@ unsigned ReplicatedPG::process_clones_to(const boost::optional<hobject_t> &head,
  *              [Snapset clones 4]
  * EOL                  obj4 snap 4, (expected)
  */
-void ReplicatedPG::_scrub(
+void ReplicatedPG::scrub_snapshot_metadata(
   ScrubMap &scrubmap,
   const map<hobject_t, pair<uint32_t, uint32_t>, hobject_t::BitwiseComparator> &missing_digest)
 {
-  dout(10) << "_scrub" << dendl;
+  dout(10) << __func__ << dendl;
 
   coll_t c(info.pgid);
   bool repair = state_test(PG_STATE_REPAIR);
@@ -12914,7 +12941,8 @@ void ReplicatedPG::_scrub(
       ++scrubber.shallow_errors;
       soid_error.set_headless();
       scrubber.store->add_snap_error(pool.id, soid_error);
-      head_error.set_clone(soid.snap);
+      if (head && soid.get_head() == head->get_head())
+	head_error.set_clone(soid.snap);
       continue;
     }
 
@@ -12955,7 +12983,6 @@ void ReplicatedPG::_scrub(
 		<< " can't decode '" << SS_ATTR << "' attr " << e.what();
 	  ++scrubber.shallow_errors;
 	  head_error.set_ss_attr_corrupted();
-	  head_error.set_ss_attr_missing(); // Not available too
         }
       }
 
@@ -13096,7 +13123,7 @@ void ReplicatedPG::_scrub(
     ++scrubber.num_digest_updates_pending;
   }
 
-  dout(10) << "_scrub (" << mode << ") finish" << dendl;
+  dout(10) << __func__ << " (" << mode << ") finish" << dendl;
 }
 
 void ReplicatedPG::_scrub_clear_state()
