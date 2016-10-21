@@ -25,8 +25,6 @@ class SnapServer : public MDSTableServer {
 protected:
   MonClient *mon_client;
   snapid_t last_snap;
-  // TODO: Well, having an in-memory map of every snapid in the system seems bad
-  map<snapid_t, SnapInfo> snaps;
   map<int, set<snapid_t> > need_to_purge;
   
   map<version_t, SnapInfo> pending_create;
@@ -44,7 +42,6 @@ public:
   void encode_server_state(bufferlist& bl) const override {
     ENCODE_START(3, 3, bl);
     ::encode(last_snap, bl);
-    ::encode(snaps, bl);
     ::encode(need_to_purge, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
@@ -54,7 +51,6 @@ public:
   void decode_server_state(bufferlist::iterator& bl) override {
     DECODE_START_LEGACY_COMPAT_LEN(3, 3, 3, bl);
     ::decode(last_snap, bl);
-    ::decode(snaps, bl);
     ::decode(need_to_purge, bl);
     ::decode(pending_create, bl);
     if (struct_v >= 2)

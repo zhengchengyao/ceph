@@ -35,7 +35,6 @@
 void SnapServer::reset_state()
 {
   last_snap = 1;  /* snapid 1 reserved for initial root snaprealm */
-  snaps.clear();
   need_to_purge.clear();
 
   // find any removed snapshot in data pools
@@ -126,7 +125,6 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
 {
   if (pending_create.count(tid)) {
     dout(7) << "commit " << tid << " create " << pending_create[tid] << dendl;
-    snaps[pending_create[tid].snapid] = pending_create[tid];
     pending_create.erase(tid);
   } 
 
@@ -134,7 +132,6 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
     snapid_t sn = pending_destroy[tid].first;
     snapid_t seq = pending_destroy[tid].second;
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
-    snaps.erase(sn);
 
     for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
 	 p != mds->mdsmap->get_data_pools().end();
@@ -283,14 +280,6 @@ void SnapServer::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("snaps");
-  for (map<snapid_t, SnapInfo>::const_iterator i = snaps.begin(); i != snaps.end(); ++i) {
-    f->open_object_section("snap");
-    i->second.dump(f);
-    f->close_section();
-  }
-  f->close_section();
-
   f->open_object_section("need_to_purge");
   for (map<int, set<snapid_t> >::const_iterator i = need_to_purge.begin(); i != need_to_purge.end(); ++i) {
     stringstream pool_id;
@@ -340,7 +329,6 @@ void SnapServer::generate_test_instances(list<SnapServer*>& ls)
   ls.push_back(blank);
   SnapServer *populated = new SnapServer();
   populated->last_snap = 123;
-  populated->snaps[456] = populated_snapinfo;
   populated->need_to_purge[2].insert(012);
   populated->pending_create[234] = populated_snapinfo;
   populated->pending_destroy[345].first = 567;
