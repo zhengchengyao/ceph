@@ -86,6 +86,7 @@ void SnapServer::_prepare(bufferlist &bl, uint64_t reqid, mds_rank_t bymds)
       }
       bl.clear();
       ::encode(last_snap, bl);
+      ::encode(last_deleted_seq, bl);
     }
     break;
 
@@ -131,6 +132,8 @@ bool SnapServer::_commit(version_t tid, MMDSTableRequest *req)
   else if (pending_destroy.count(tid)) {
     snapid_t sn = pending_destroy[tid].first;
     snapid_t seq = pending_destroy[tid].second;
+    assert (seq > last_deleted_seq);
+    last_deleted_seq = seq;
     dout(7) << "commit " << tid << " destroy " << sn << " seq " << seq << dendl;
 
     for (set<int64_t>::const_iterator p = mds->mdsmap->get_data_pools().begin();
@@ -258,7 +261,7 @@ void SnapServer::check_osd_map(bool force)
     dout(10) << "requesting removal of " << all_purge << dendl;
     map<int, snapid_t> snap_seqs;
     for (auto i : all_purge) {
-      snap_seqs[i.first] = last_snap;
+      snap_seqs[i.first] = last_deleted_seq;
     }
     MRemoveSnaps *m = new MRemoveSnaps(all_purge, snap_seqs);
     mon_client->send_mon_message(m);

@@ -23,8 +23,10 @@ class MDSRank;
 class LogSegment;
 
 class SnapClient : public MDSTableClient {
+  snapid_t last_deleted_seq;
 public:
-  explicit SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP) {}
+  explicit SnapClient(MDSRank *m) : MDSTableClient(m, TABLE_SNAP),
+				    last_deleted_seq(0) {}
 
   void resend_queries() {}
   void handle_query_result(MMDSTableRequest *m) {}
@@ -56,6 +58,11 @@ public:
     ::encode(snapid, bl);
     _prepare(bl, pstid, pbl, onfinish);
   }
+
+  void report_deleted_seq(snapid_t seq) {
+    last_deleted_seq = MAX(last_deleted_seq, seq);
+  }
+  snapid_t get_last_deleted_seq() { return last_deleted_seq; }
 };
 
 #endif

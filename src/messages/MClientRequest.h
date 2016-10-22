@@ -47,11 +47,12 @@
 // metadata ops.
 
 class MClientRequest : public Message {
-  static const int HEAD_VERSION = 4;
+  static const int HEAD_VERSION = 5;
   static const int COMPAT_VERSION = 1;
 
 public:
   struct ceph_mds_request_head head;
+  snapid_t last_deleted_snap_seq;
   utime_t stamp;
 
   struct Release {
@@ -83,9 +84,11 @@ public:
  public:
   // cons
   MClientRequest()
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION),
+      last_deleted_snap_seq(0) {}
   MClientRequest(int op)
-    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : Message(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION),
+      last_deleted_snap_seq(0) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }
@@ -197,6 +200,8 @@ public:
       ::decode(stamp, p);
     if (header.version >= 4) // epoch 3 was for a ceph_mds_request_args change
       ::decode(gid_list, p);
+    if (header.version >= 5)
+      ::decode(last_deleted_snap_seq, p);
   }
 
   void encode_payload(uint64_t features) {
@@ -217,6 +222,7 @@ public:
     ::encode_nohead(releases, payload);
     ::encode(stamp, payload);
     ::encode(gid_list, payload);
+    ::encode(last_deleted_snap_seq, payload);
   }
 
   const char *get_type_name() const { return "creq"; }
@@ -266,6 +272,7 @@ public:
     for (auto i = gid_list.begin(); i != gid_list.end(); ++i)
       out << *i << ',';
     out << '}'
+	<< " last_deleted_snap_seq " << last_deleted_snap_seq
 	<< ")";
   }
 

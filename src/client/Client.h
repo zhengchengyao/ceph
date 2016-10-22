@@ -312,6 +312,10 @@ protected:
 
   void set_cap_epoch_barrier(epoch_t e);
   epoch_t cap_epoch_barrier;
+  snapid_t last_deleted_snap_seq; // latest deletion seq the MDS reported to us
+  void report_last_deleted_snap_seq(snapid_t seq) {
+    last_deleted_snap_seq = MAX(seq, last_deleted_snap_seq);
+  }
 
   // mds sessions
   map<mds_rank_t, MetaSession*> mds_sessions;  // mds -> push seq

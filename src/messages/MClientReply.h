@@ -201,11 +201,14 @@ struct InodeStat {
 
 class MClientReply : public Message {
   // reply data
+  static const int HEAD_VERSION = 2;
+  static const int COMPAT_VERSION = 1;
 public:
   struct ceph_mds_reply_head head;
   bufferlist trace_bl;
   bufferlist extra_bl;
   bufferlist snapbl;
+  snapid_t last_deleted_snap_seq;
 
  public:
   int get_op() const { return head.op; }
@@ -223,9 +226,11 @@ public:
 
   bool is_safe() const { return head.safe; }
 
-  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply() : Message(CEPH_MSG_CLIENT_REPLY, HEAD_VERSION, COMPAT_VERSION),
+		   last_deleted_snap_seq(0) {}
   MClientReply(MClientRequest *req, int result = 0) : 
-    Message(CEPH_MSG_CLIENT_REPLY) {
+    Message(CEPH_MSG_CLIENT_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    last_deleted_snap_seq(0) {
     memset(&head, 0, sizeof(head));
     header.tid = req->get_tid();
     head.op = req->get_op();
@@ -259,13 +264,16 @@ public:
     ::decode(trace_bl, p);
     ::decode(extra_bl, p);
     ::decode(snapbl, p);
-    assert(p.end());
+    if (header.version >= 2) {
+      ::encode(last_deleted_snap_seq, payload);
+    }
   }
   virtual void encode_payload(uint64_t features) {
     ::encode(head, payload);
     ::encode(trace_bl, payload);
     ::encode(extra_bl, payload);
     ::encode(snapbl, payload);
+    ::encode(last_deleted_snap_seq, payload);
   }
 
 

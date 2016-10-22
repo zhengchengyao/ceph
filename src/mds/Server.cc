@@ -8121,9 +8121,12 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   }
 
   version_t stid = mdr->more()->stid;
-  snapid_t snapid;
+  snapid_t snapid, last_deleted;
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
   ::decode(snapid, p);
+  ::decode(last_deleted, p);
+  // TODO: This is a client attack point if it lies
+  mds->snapclient->report_deleted_seq(last_deleted);
   dout(10) << " stid " << stid << " snapid " << snapid << dendl;
 
   // journal
@@ -8259,6 +8262,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   bufferlist::iterator p = mdr->more()->snapidbl.begin();
   snapid_t seq;
   ::decode(seq, p);  
+  mds->snapclient->report_deleted_seq(seq);
   dout(10) << " stid is " << stid << ", seq is " << seq << dendl;
 
   // journal

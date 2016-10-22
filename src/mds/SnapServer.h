@@ -32,20 +32,23 @@ protected:
   set<version_t>           pending_noop;
 
   version_t last_checked_osdmap;
+  snapid_t last_deleted_seq;
 
 public:
   SnapServer(MDSRank *m, MonClient *monc)
-    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0)
+    : MDSTableServer(m, TABLE_SNAP), mon_client(monc), last_checked_osdmap(0),
+      last_deleted_seq(0)
   {}
     
   void reset_state() override;
   void encode_server_state(bufferlist& bl) const override {
-    ENCODE_START(3, 3, bl);
+    ENCODE_START(4, 3, bl);
     ::encode(last_snap, bl);
     ::encode(need_to_purge, bl);
     ::encode(pending_create, bl);
     ::encode(pending_destroy, bl);
     ::encode(pending_noop, bl);
+    ::encode(last_deleted_seq, bl);
     ENCODE_FINISH(bl);
   }
   void decode_server_state(bufferlist::iterator& bl) override {
@@ -62,6 +65,9 @@ public:
 	pending_destroy[p->first].first = p->second; 
     } 
     ::decode(pending_noop, bl);
+    if (struct_v >= 4) {
+      ::decode(last_deleted_seq, bl);
+    }
     DECODE_FINISH(bl);
   }
 
