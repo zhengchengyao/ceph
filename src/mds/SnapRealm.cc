@@ -15,6 +15,7 @@
 #include "SnapRealm.h"
 #include "MDCache.h"
 #include "MDSRank.h"
+#include "SnapClient.h"
 
 #include "messages/MClientSnap.h"
 
@@ -283,14 +284,19 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
 
 
-void SnapRealm::prune_deleted_snaps()
+bool SnapRealm::prune_deleted_snaps()
 {
+  if (cached_last_prune >= mdcache->mds->snapclient->get_last_deleted_seq()) {
+    return false;
+  }
   const auto& data_pools = mdcache->mds->mdsmap->get_data_pools();
-  set<snapid_t> to_purge;
+  set<snapid_t> to_prune;
   snapid_t last_destroyed = 0;
+  snapid_t last_prune = MAX(cached_last_prune, srnode.last_destroyed);
 
   mdcache->mds->objecter->with_osdmap(
-    [this, &data_pools, &to_purge, &last_destroyed](const OSDMap& osdmap) {
+    [this, &data_pools, &to_prune, &last_destroyed,
+     &last_prune](const OSDMap& osdmap) {
       auto i = this->srnode.snaps.begin();
       while (i != this->srnode.snaps.end()) {
 	auto j = i++;
@@ -300,29 +306,37 @@ void SnapRealm::prune_deleted_snaps()
 	  // added after the snap was actually deleted, and I can't think of an
 	  // efficient way for SnapClients to query this state instead.
 	  const pg_pool_t *pgpool = osdmap.get_pg_pool(pool);
+	  last_prune = MAX(last_prune, pgpool->get_snap_seq());
 	  if (pgpool && pgpool->is_removed_snap(j->first)) {
 	    removed = true;
 	    last_destroyed = MAX(last_destroyed, pgpool->get_snap_seq());
 	    break;
+	  } else if (pgpool->get_snap_seq() <= this->cached_last_prune) {
+	    // TODO: does this work for newly-added data pools? make sure!
+	    return;
 	  }
 	}
 	if (removed) {
-	  to_purge.insert(j->first);
+	  to_prune.insert(j->first);
 	}
       }
     });
-  // TODO: SnapRealm is about to get a lot smaller; can we pull out the explicit
-  // dependence on Objecter/OSDMap and write some unit tests?
+  // TODO: Redo this whole OSDMap-based thing with a cached MDSRank
+  // interval_set of deleted snaps. Makes everything more efficient
+  // and easier to work with.
+
+  cached_last_prune = last_prune;
 
   if (last_destroyed > 0) {
-    for (auto snapid : to_purge) {
+    for (auto snapid : to_prune) {
       srnode.snaps.erase(snapid);
     }
     assert(last_destroyed > srnode.last_destroyed);
     srnode.last_destroyed = last_destroyed;
   } else {
-    assert(to_purge.empty());
+    assert(to_prune.empty());
   }
+  return !to_prune.empty();
 }
 
 void SnapRealm::merge_snaps_from(const SnapRealm *parent)

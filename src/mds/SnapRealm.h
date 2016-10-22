@@ -37,8 +37,8 @@ struct SnapRealm {
   snapid_t cached_seq;           // max seq over self and all past+present parents.
   set<snapid_t> cached_snaps;
   SnapContext cached_snap_context;
-
   bufferlist cached_snap_trace;
+  snapid_t cached_last_prune; // last snap seq we checked deleted snaps
 
   elist<CInode*> inodes_with_caps;             // for efficient realm splits
   map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
@@ -47,6 +47,7 @@ struct SnapRealm {
     srnode(),
     mdcache(c), inode(in),
     parent(0),
+    cached_last_prune(0),
     inodes_with_caps(0) 
   { }
 
@@ -60,7 +61,8 @@ struct SnapRealm {
     return false;
   }
 
-  void prune_deleted_snaps();
+  // @return: true if we pruned any snapshots
+  bool prune_deleted_snaps();
   bool has_live_snapshots() { // this is what StrayManager REALLY cares about...
     return !srnode.snaps.empty();
   }
@@ -78,6 +80,7 @@ struct SnapRealm {
   const SnapContext& get_snap_context();
   void invalidate_cached_snaps() {
     cached_seq = 0;
+    cached_last_prune = 0;
   }
   snapid_t get_last_created() {
     return srnode.last_created;
