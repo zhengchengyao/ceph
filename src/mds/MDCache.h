@@ -518,7 +518,6 @@ protected:
 				      set<SimpleLock *>& gather_locks);
   void handle_cache_rejoin_ack(MMDSCacheRejoin *m);
   void rejoin_send_acks();
-  void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
     if (rejoins_pending)
       rejoin_send_rejoins();

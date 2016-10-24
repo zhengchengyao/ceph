@@ -5103,62 +5103,6 @@ void MDCache::handle_cache_rejoin_ack(MMDSCacheRejoin *ack)
   }
 }
 
-/**
- * rejoin_trim_undef_inodes() -- remove REJOINUNDEF flagged inodes
- *
- * FIXME: wait, can this actually happen?  a survivor should generate cache trim
- * messages that clean these guys up...
- */
-void MDCache::rejoin_trim_undef_inodes()
-{
-  dout(10) << "rejoin_trim_undef_inodes" << dendl;
-
-  while (!rejoin_undef_inodes.empty()) {
-    set<CInode*>::iterator p = rejoin_undef_inodes.begin();
-    CInode *in = *p;
-    rejoin_undef_inodes.erase(p);
-
-    in->clear_replica_map();
-    
-    // close out dirfrags
-    if (in->is_dir()) {
-      list<CDir*> dfls;
-      in->get_dirfrags(dfls);
-      for (list<CDir*>::iterator p = dfls.begin();
-	   p != dfls.end();
-	   ++p) {
-	CDir *dir = *p;
-	dir->clear_replica_map();
-
-	for (CDir::map_t::iterator p = dir->items.begin();
-	     p != dir->items.end();
-	     ++p) {
-	  CDentry *dn = p->second;
-	  dn->clear_replica_map();
-
-	  dout(10) << " trimming " << *dn << dendl;
-	  dir->remove_dentry(dn);
-	}
-
-	dout(10) << " trimming " << *dir << dendl;
-	in->close_dirfrag(dir->dirfrag().frag);
-      }
-    }
-    
-    CDentry *dn = in->get_parent_dn();
-    if (dn) {
-      dn->clear_replica_map();
-      dout(10) << " trimming " << *dn << dendl;
-      dn->dir->remove_dentry(dn);
-    } else {
-      dout(10) << " trimming " << *in << dendl;
-      remove_inode(in);
-    }
-  }
-
-  assert(rejoin_undef_inodes.empty());
-}
-
 void MDCache::rejoin_gather_finish() 
 {
   dout(10) << "rejoin_gather_finish" << dendl;
