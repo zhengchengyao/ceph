@@ -476,7 +476,6 @@ private:
   void link_inode_work( CDentry *dn, CInode *in );
   void unlink_inode_work( CDentry *dn );
   void remove_null_dentries();
-  void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 public:
   void touch_dentries_bottom();
   void try_remove_dentries_for_stray();
