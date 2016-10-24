@@ -2550,6 +2550,8 @@ void CInode::purge_stale_snap_data(const set<snapid_t>& snaps)
   compact_map<snapid_t,old_inode_t>::iterator p = old_inodes.begin();
   while (p != old_inodes.end()) {
     set<snapid_t>::const_iterator q = snaps.lower_bound(p->second.first);
+    // TODO: Shouldn't this comparison be if the old_inode's *last* is older
+    //   than the oldest extant snapid?
     if (q == snaps.end() || *q > p->first) {
       dout(10) << " purging old_inode [" << p->second.first << "," << p->first << "]" << dendl;
       old_inodes.erase(p++);
