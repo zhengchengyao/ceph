@@ -284,7 +284,7 @@ void SnapRealm::build_snap_trace(bufferlist& snapbl)
 
 
 
-bool SnapRealm::prune_deleted_snaps()
+bool SnapRealm::prune_deleted_snaps(snapid_t removed, snapid_t removed_v)
 {
   if (cached_last_prune >= mdcache->mds->snapclient->get_last_deleted_seq()) {
     return false;
@@ -331,10 +331,17 @@ bool SnapRealm::prune_deleted_snaps()
     for (auto snapid : to_prune) {
       srnode.snaps.erase(snapid);
     }
-    assert(last_destroyed > srnode.last_destroyed);
+    // TODO: this is terribly wrong and if it's equal I've probably skipped
+    // erasing a snap I should have; but right now deleting is imperfect
+    assert(last_destroyed >= srnode.last_destroyed);
     srnode.last_destroyed = last_destroyed;
   } else {
     assert(to_prune.empty());
+  }
+  if (removed && srnode.snaps.erase(removed)) {
+    assert(removed_v > srnode.last_destroyed);
+    srnode.snaps.erase(removed);
+    // don't set last_destroyed because we might have missed others
   }
   return !to_prune.empty();
 }

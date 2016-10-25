@@ -62,7 +62,7 @@ struct SnapRealm {
   }
 
   // @return: true if we pruned any snapshots
-  bool prune_deleted_snaps();
+  bool prune_deleted_snaps(snapid_t removed=0, snapid_t removed_v=0);
   bool has_live_snapshots() { // this is what StrayManager REALLY cares about...
     return !srnode.snaps.empty();
   }
