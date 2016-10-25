@@ -5451,6 +5451,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir()) {
     if (rmdir) {
       // do empty directory checks
+      if (!_try_snap_prune_for_delete(in, req->last_deleted_snap_seq, mdr)) {
+	return; // it'll re-schedule us
+      }
       if (_dir_is_nonempty_unlocked(mdr, in)) {
 	respond_to_request(mdr, -ENOTEMPTY);
 	return;
@@ -6004,8 +6007,8 @@ bool Server::_dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *in)
   dout(10) << "dir_is_nonempty_unlocked " << *in << dendl;
   assert(in->is_auth());
 
-  if (in->snaprealm && in->snaprealm->srnode.snaps.size())
-    return true; // in a snapshot!
+  if (in->snaprealm && in->snaprealm->has_live_snapshots())
+    return true; // we host a snapshot!
 
   list<CDir*> ls;
   in->get_dirfrags(ls);
@@ -6051,6 +6054,26 @@ bool Server::_dir_is_nonempty(MDRequestRef& mdr, CInode *in)
   }
 
   return dirstat.size() != in->get_projected_inode()->dirstat.size();
+}
+
+bool Server::_try_snap_prune_for_delete(CInode *in, snapid_t prune_to,
+					MDRequestRef& mdr)
+{
+  assert(in->is_dir());
+  if (in->snaprealm && in->snaprealm->has_live_snapshots()) {
+    // try and clean them up in case they're stale
+    in->snaprealm->prune_deleted_snaps();
+    // we have to wait on a new OSDMap if we're out of date
+    if (in->snaprealm->has_live_snapshots() &&
+	prune_to > in->snaprealm->cached_last_prune) {
+      epoch_t osd_epoch = mds->get_osd_epoch() + 1;
+      C_MDS_RetryRequest *retry = new C_MDS_RetryRequest(mdcache, mdr);
+      if (!mds->objecter->wait_for_map(osd_epoch, retry))
+	return false;
+      delete retry;
+    }
+  }
+  return true;
 }
 
 
@@ -6160,6 +6183,10 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     }
 
     // non-empty dir? do trivial fast unlocked check, do another check later with read locks
+    if (oldin->is_dir() &&
+	!_try_snap_prune_for_delete(oldin, req->last_deleted_snap_seq, mdr)) {
+      return;
+    }
     if (oldin->is_dir() && _dir_is_nonempty_unlocked(mdr, oldin)) {
       respond_to_request(mdr, -ENOTEMPTY);
       return;

@@ -227,6 +227,9 @@ public:
   void handle_client_unlink(MDRequestRef& mdr);
   bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
   bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
+  // @returns true if it finished; otherwise it waitlisted and you should bail
+  bool _try_snap_prune_for_delete(CInode *in, snapid_t prune_to,
+				  MDRequestRef& mdr);
   void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
   void _unlink_local_finish(MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
