@@ -8305,7 +8305,7 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   sr_t *newnode = diri->project_snaprealm();
   newnode->snaps.erase(snapid);
   newnode->seq = seq;
-  newnode->last_destroyed = seq;
+  newnode->last_destroyed = seq; // TODO: this is a troublemaker because it's not OSDMap- nor parent's-last-destroyed based. But I don't see how a single-MDS system can break even so.
 
   le->metablob.add_client_req(req->get_reqid(), req->get_oldest_client_tid());
   le->metablob.add_table_transaction(TABLE_SNAP, stid);
