@@ -1139,7 +1139,7 @@ AuthAuthorizer* MonClient::build_authorizer(int service_id) const {
 
 #define dout_subsys ceph_subsys_monc
 #undef dout_prefix
-#define dout_prefix *_dout << "monclient(hunting): "
+#define dout_prefix *_dout << "monclient" << (have_session() ? ": " : "(hunting): ")
 
 MonConnection::MonConnection(CephContext *cct, ConnectionRef con,
                            const EntityName& entity_name,
