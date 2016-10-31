@@ -825,6 +825,36 @@ class TestIoctx(object):
         ret, buf = self.ioctx.execute("foo", "hello", "say_hello", b"nose")
         eq(buf, b"Hello, nose!")
 
+    def test_aio_execute(self):
+        count = [0]
+        retval = [None, None]
+        lock = threading.Condition()
+        def cb(_, buf):
+            with lock:
+                retval[count[0]] = buf
+                count[0] += 1
+                lock.notify()
+        self.ioctx.write("foo", b"") # ensure object exists
+
+        comp = self.ioctx.aio_exec("foo", "hello", "say_hello", b"", oncomplete=cb, onsafe=cb)
+        comp.wait_for_complete()
+        with lock:
+            while count[0] is < 2:
+                lock.wait()
+        eq(comp.get_return_value(), 13)
+        eq(retval, [b"Hello, world!", b"Hello, world!"])
+
+        retval[0] = None
+        comp = self.ioctx.aio_exec("foo", "hello", "say_hello", b"nose", oncomplete=cb, onsafe=cb)
+        comp.wait_for_complete()
+        with lock:
+	    while count[0] is < 2:
+		lock.wait()
+        eq(comp.get_return_value(), 12)
+        eq(retval, [b"Hello, nose!", b"Hello, nose!"])
+
+        [i.remove() for i in self.ioctx.list_objects()]
+
 class TestObject(object):
 
     def setUp(self):
