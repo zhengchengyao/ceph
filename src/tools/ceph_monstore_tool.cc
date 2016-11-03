@@ -217,6 +217,8 @@ void usage(const char *n, po::options_description &d)
   << "                                  (rewrite-crush -- --help for more info)\n"
   << "  inflate-pgmap [-- options]      add given number of pgmaps to store\n"
   << "                                  (inflate-pgmap -- --help for more info)\n"
+  << "  sanitize-paxos [-- options]     sanitize paxos versions\n"
+  << "                                  (sanitize-paxos -- --help for more info)\n"
   << std::endl;
   std::cerr << d << std::endl;
   std::cerr
@@ -1094,6 +1096,92 @@ int main(int argc, char **argv) {
       goto done;
     }
     err = inflate_pgmap(st, n, can_be_trimmed);
+  } else if (cmd == "sanitize-paxos") {
+    bool dry_run = false;
+    po::options_description op_desc("Allowed 'sanitize-paxos' options");
+    op_desc.add_options()
+      ("help", "produce this help message")
+      ("dry-run", po::bool_switch(&dry_run)->default_value(false),
+       "do not modify the store (default: false)")
+      ;
+
+    po::variables_map op_vm;
+    try {
+      po::parsed_options op_parsed = po::command_line_parser(subcmds).
+        options(op_desc).run();
+      po::store(op_parsed, op_vm);
+      po::notify(op_vm);
+    } catch (po::error &e) {
+      std::cerr << "error: " << e.what() << std::endl;
+      err = EINVAL;
+      goto done;
+    }
+
+    if (op_vm.count("help")) {
+      usage(argv[0], op_desc);
+      err = 0;
+      goto done;
+    }
+
+    uint64_t paxos_first = st.get("paxos", "first_committed");
+    uint64_t paxos_last = st.get("paxos", "last_committed");
+    assert(paxos_first <= paxos_last);
+
+    list<pair<uint64_t,uint64_t> > ranges;
+
+    for (uint64_t e = 0; e < paxos_first ; ++e) {
+      if (!st.exists("paxos", e)) {
+        continue;
+      }
+
+      if (ranges.empty()) {
+        ranges.push_back(make_pair<uint64_t,uint64_t>(e, e));
+      } else {
+        pair<uint64_t,uint64_t> &p = ranges.back();
+        if (p.second == e - 1) {
+          p.second = e;
+        } else if (p.second < e) {
+          ranges.push_back(make_pair<uint64_t,uint64_t>(e, e));
+        }
+      }
+    }
+
+    if (ranges.empty()) {
+      std::cout << "did not find any surplus paxos versions" << std::endl;
+      err = 0;
+      goto done;
+    }
+
+    std::cout << "found surplus paxos versions that ought to be removed:"
+              << std::endl;
+    for (list<pair<uint64_t,uint64_t> >::const_iterator p = ranges.begin();
+         p != ranges.end(); ++p) {
+      std::cout << " - [ " << p->first << " .. " << p->second
+                << "]" << std::endl;
+    }
+
+    if (dry_run) {
+      std::cout << "exiting without taking action because "
+                << "'--dry-run' was supplied" << std::endl;
+      err = 0;
+      goto done;
+    }
+
+    for (list<pair<uint64_t,uint64_t> >::const_iterator p = ranges.begin();
+         p != ranges.end(); ++p) {
+      std::cout << "removing paxos versions [" << p->first << " .. "
+                << p->second << "]" << std::endl;
+      MonitorDBStore::TransactionRef txn(new MonitorDBStore::Transaction);
+      for (uint64_t e = p->first; e <= p->second; ++e) {
+        txn->erase("paxos", e);
+      }
+      st.apply_transaction(txn);
+      txn.reset(new MonitorDBStore::Transaction);
+    }
+
+    std::cout << "all done!" << std::endl;
+
+
   } else {
     std::cerr << "Unrecognized command: " << cmd << std::endl;
     usage(argv[0], desc);
