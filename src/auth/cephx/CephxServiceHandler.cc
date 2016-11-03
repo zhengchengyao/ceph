@@ -79,7 +79,9 @@ int CephxServiceHandler::handle_request(bufferlist::iterator& indata, bufferlist
 	break;
       }
 
-      ldout(cct, 20) << " checking key: req.key=" << hex << req.key
+      ldout(cct, 10) << "get_auth_session_key: client_challenge " << req.client_challenge << dendl;
+      ldout(cct, 10) << "get_auth_session_key: server_challenge " << server_challenge << dendl;
+      ldout(cct, 10) << " checking key: req.key=" << hex << req.key
 	       << " expected_key=" << expected_key << dec << dendl;
       if (req.key != expected_key) {
         ldout(cct, 0) << " unexpected key: req.key=" << hex << req.key

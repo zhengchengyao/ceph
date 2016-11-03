@@ -71,6 +71,8 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     ::encode(req, bl);
 
     ldout(cct, 10) << "get auth session key: client_challenge " << req.client_challenge << dendl;
+    ldout(cct, 10) << "get auth session key: server_challenge " << server_challenge << dendl;
+    ldout(cct, 10) << "get auth session key: key " << hex << req.key << dendl;
     return 0;
   }
 
