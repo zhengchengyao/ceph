@@ -1098,11 +1098,14 @@ int main(int argc, char **argv) {
     err = inflate_pgmap(st, n, can_be_trimmed);
   } else if (cmd == "sanitize-paxos") {
     bool dry_run = false;
+    bool gen_clutter = false;
     po::options_description op_desc("Allowed 'sanitize-paxos' options");
     op_desc.add_options()
       ("help", "produce this help message")
       ("dry-run", po::bool_switch(&dry_run)->default_value(false),
        "do not modify the store (default: false)")
+      ("generate-clutter", po::bool_switch(&gen_clutter)->default_value(false),
+       "create clutter if there's none in the store (may trash the store) (default: false)")
       ;
 
     po::variables_map op_vm;
@@ -1126,6 +1129,48 @@ int main(int argc, char **argv) {
     uint64_t paxos_first = st.get("paxos", "first_committed");
     uint64_t paxos_last = st.get("paxos", "last_committed");
     assert(paxos_first <= paxos_last);
+
+    std::cout << "paxos [" << paxos_first
+              << " .. " << paxos_last << "]" << std::endl;
+
+    if (gen_clutter) {
+
+      uint64_t new_paxos_first = 0, new_paxos_last = 0;
+      int n_versions = paxos_last - paxos_first;
+
+      if (n_versions > 2*g_conf->paxos_min) {
+        new_paxos_first = paxos_last - g_conf->paxos_min;
+        new_paxos_last = paxos_last;
+      } else {
+
+        int additional_versions = (2*g_conf->paxos_min - n_versions);
+        new_paxos_last = paxos_last + additional_versions;
+        new_paxos_first = new_paxos_last - g_conf->paxos_min;
+      }
+
+      std::cout << "current paxos versions [" << paxos_first << " .. "
+        << paxos_last << "]" << std::endl;
+      std::cout << "new paxos versions [" << new_paxos_first << " .. "
+        << new_paxos_last << "]" << std::endl;
+
+      if (dry_run) {
+        std::cout << "exiting without generating clutter" << std::endl;
+        err = 0;
+        goto done;
+      }
+      MonitorDBStore::TransactionRef txn(new MonitorDBStore::Transaction);
+      if (new_paxos_first < new_paxos_last) {
+        for (uint64_t e = paxos_last; e <= new_paxos_last; ++e) {
+          bufferlist bl;
+          txn->put("paxos", e, bl);
+        }
+      }
+      txn->put("paxos", "first_committed", new_paxos_first);
+      txn->put("paxos", "last_committed", new_paxos_last);
+      st.apply_transaction(txn);
+      paxos_first = new_paxos_first;
+      paxos_last = new_paxos_last;
+    }
 
     list<pair<uint64_t,uint64_t> > ranges;
 
