@@ -35,9 +35,7 @@ void register_test_mirroring() {
 
 class TestMirroring : public TestFixture {
 public:
-
   TestMirroring() {}
-
 
   virtual void TearDown() {
     unlock_image();
