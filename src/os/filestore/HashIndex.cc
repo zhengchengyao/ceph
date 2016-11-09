@@ -960,8 +960,6 @@ int HashIndex::list_by_hash_bitwise(
   ghobject_t *next,
   vector<ghobject_t> *out)
 {
-  dout(30) << __func__ << " path " << path << " end " << end
-	   << " max_count " << max_count << dendl;
   vector<string> next_path = path;
   next_path.push_back("");
   set<string, CmpHexdigitStringBitwise> hash_prefixes;
@@ -970,6 +968,9 @@ int HashIndex::list_by_hash_bitwise(
 					    next,
 					    &hash_prefixes,
 					    &objects);
+  dout(30) << __func__ << " path " << path << " end " << end
+	   << " max_count " << max_count
+	   << " r " << r << " objects " << objects.size() << dendl;
   if (r < 0)
     return r;
   for (set<string, CmpHexdigitStringBitwise>::iterator i = hash_prefixes.begin();
@@ -978,7 +979,10 @@ int HashIndex::list_by_hash_bitwise(
     dout(20) << __func__ << " prefix " << *i << dendl;
     set<pair<string, ghobject_t>, CmpPairBitwise>::iterator j = objects.lower_bound(
       make_pair(*i, ghobject_t()));
-    dout(30) << __func__ << "   j " << j->first << " " << j->second << dendl;
+    if (j == objects.end())
+      dout(30) << __func__ << "   j (end)" << dendl;
+    else
+      dout(30) << __func__ << "   j " << j->first << " " << j->second << dendl;
     if (j == objects.end() || j->first != *i) {
       *(next_path.rbegin()) = *(i->rbegin());
       ghobject_t next_recurse;
