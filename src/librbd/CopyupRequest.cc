@@ -146,7 +146,7 @@ bool CopyupRequest::send_copyup() {
     ldout(m_ictx->cct, 20) << __func__ << " " << this << " copyup with "
                            << "empty snapshot context" << dendl;
     librados::AioCompletion *comp = util::create_rados_safe_callback(this);
-    r = m_ictx->md_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
+    r = m_ictx->data_ctx.aio_operate(m_oid, comp, &copyup_op, 0, snaps);
     assert(r == 0);
     comp->release();
   }
