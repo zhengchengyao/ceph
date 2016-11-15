@@ -1044,6 +1044,12 @@ void PGLog::read_log(ObjectStore *store, coll_t pg_coll,
 	 * version would not have been recovered, and a newer version
 	 * would show up in the log above.
 	 */
+	if (oi.version != i->first) {
+	  ldpp_dout(dpp, 0) << __func__
+			    << ": divergent prior version mismatch, oi is: "
+			    << oi << " and divergent prior entry is: " << *i
+			    << dendl;
+	}
 	assert(oi.version == i->first);
       } else {
 	ldpp_dout(dpp, 15) << "read_log  missing " << *i << dendl;
