@@ -1493,7 +1493,11 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
     return;
   }
 
-  ENCODE_START(24, 5, bl);
+  __u8 v = 24;
+  if (!(features & CEPH_FEATURE_NEW_OSDOP_ENCODING)) {
+    v = 17;
+  }
+  ENCODE_START(v, 5, bl);
   ::encode(type, bl);
   ::encode(size, bl);
   ::encode(crush_ruleset, bl);
@@ -1535,13 +1539,15 @@ void pg_pool_t::encode(bufferlist& bl, uint64_t features) const
   ::encode(last_force_op_resend, bl);
   ::encode(min_read_recency_for_promote, bl);
   ::encode(expected_num_objects, bl);
-  ::encode(cache_target_dirty_high_ratio_micro, bl);
-  ::encode(min_write_recency_for_promote, bl);
-  ::encode(use_gmt_hitset, bl);
-  ::encode(fast_read, bl);
-  ::encode(hit_set_grade_decay_rate, bl);
-  ::encode(hit_set_search_last_n, bl);
-  ::encode(opts, bl);
+  if (v >= 24) {
+    ::encode(cache_target_dirty_high_ratio_micro, bl);
+    ::encode(min_write_recency_for_promote, bl);
+    ::encode(use_gmt_hitset, bl);
+    ::encode(fast_read, bl);
+    ::encode(hit_set_grade_decay_rate, bl);
+    ::encode(hit_set_search_last_n, bl);
+    ::encode(opts, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
