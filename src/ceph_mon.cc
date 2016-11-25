@@ -614,28 +614,42 @@ int main(int argc, const char **argv)
   } else {
     dout(0) << g_conf->name << " does not exist in monmap, will attempt to join an existing cluster" << dendl;
 
-    pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
-    if (!g_conf->public_addr.is_blank_ip()) {
-      ipaddr = g_conf->public_addr;
-      if (ipaddr.get_port() == 0)
-	ipaddr.set_port(CEPH_MON_PORT);
-      dout(0) << "using public_addr " << g_conf->public_addr << " -> "
-	      << ipaddr << dendl;
-    } else {
-      MonMap tmpmap;
-      int err = tmpmap.build_initial(g_ceph_context, cerr);
-      if (err < 0) {
-	derr << argv[0] << ": error generating initial monmap: "
-             << cpp_strerror(err) << dendl;
-	usage();
-	prefork.exit(1);
+    entity_addr_t conf_host;
+    std::vector <std::string> my_sections;
+    g_conf->get_my_sections(my_sections);
+    std::string mon_host_str;
+    if (g_conf->get_val_from_conf_file(my_sections, "mon host",
+				       mon_host_str, true) == 0) {
+      if (conf_host.parse(mon_host_str.c_str())) {
+        ipaddr = conf_host;
+        ipaddr.set_port(CEPH_MON_PORT);
+        dout(0) << "using mon host " << conf_host << " -> "
+                << ipaddr << dendl;
       }
-      if (tmpmap.contains(g_conf->name.get_id())) {
-	ipaddr = tmpmap.get_addr(g_conf->name.get_id());
+    } else {
+      pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
+      if (!g_conf->public_addr.is_blank_ip()) {
+        ipaddr = g_conf->public_addr;
+        if (ipaddr.get_port() == 0)
+          ipaddr.set_port(CEPH_MON_PORT);
+        dout(0) << "using public_addr " << g_conf->public_addr << " -> "
+                << ipaddr << dendl;
       } else {
-	derr << "no public_addr or public_network specified, and " << g_conf->name
-	     << " not present in monmap or ceph.conf" << dendl;
-	prefork.exit(1);
+        MonMap tmpmap;
+        int err = tmpmap.build_initial(g_ceph_context, cerr);
+        if (err < 0) {
+          derr << argv[0] << ": error generating initial monmap: "
+               << cpp_strerror(err) << dendl;
+          usage();
+          prefork.exit(1);
+        }
+        if (tmpmap.contains(g_conf->name.get_id())) {
+          ipaddr = tmpmap.get_addr(g_conf->name.get_id());
+        } else {
+          derr << "no public_addr or public_network specified, and " << g_conf->name
+               << " not present in monmap or ceph.conf" << dendl;
+          prefork.exit(1);
+        }
       }
     }
   }
