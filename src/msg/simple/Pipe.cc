@@ -1043,9 +1043,15 @@ int Pipe::connect()
     goto fail;
   }
   {
-    bufferlist::iterator p = addrbl.begin();
-    ::decode(paddr, p);
-    ::decode(peer_addr_for_me, p);
+    try {
+      bufferlist::iterator p = addrbl.begin();
+      ::decode(paddr, p);
+      ::decode(peer_addr_for_me, p);
+    }
+    catch (buffer::error& e) {
+      ldout(msgr->cct,2) << "connect couldn't decode peer addrs" << dendl;
+      goto fail;
+    }
     port = peer_addr_for_me.get_port();
   }
 
