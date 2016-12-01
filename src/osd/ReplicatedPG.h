@@ -829,6 +829,7 @@ protected:
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
   boost::intrusive_ptr<RepGather> new_repop(
+    eversion_t version,
     ObcLockManager &&manager,
     OpRequestRef &&op,
     boost::optional<std::function<void(void)> > &&on_complete);

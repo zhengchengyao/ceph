@@ -8649,10 +8649,12 @@ ReplicatedPG::RepGather *ReplicatedPG::new_repop(
 
   osd->logger->inc(l_osd_op_wip);
 
+  dout(10) << __func__ << ": " << *repop << dendl;
   return repop;
 }
 
 boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
+  eversion_t version,
   ObcLockManager &&manager,
   OpRequestRef &&op,
   boost::optional<std::function<void(void)> > &&on_complete)
@@ -8663,6 +8665,7 @@ boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
     std::move(on_complete),
     osd->get_tid(),
     info.last_complete);
+  repop->v = version;
 
   repop->start = ceph_clock_now(cct);
 
@@ -8670,6 +8673,7 @@ boost::intrusive_ptr<ReplicatedPG::RepGather> ReplicatedPG::new_repop(
 
   osd->logger->inc(l_osd_op_wip);
 
+  dout(10) << __func__ << ": " << *repop << dendl;
   return boost::intrusive_ptr<RepGather>(repop);
 }
  
@@ -8721,15 +8725,17 @@ void ReplicatedPG::submit_log_entries(
   dout(10) << __func__ << " " << entries << dendl;
   assert(is_primary());
 
+  eversion_t version;
   if (!entries.empty()) {
     assert(entries.rbegin()->version >= projected_last_update);
-    projected_last_update = entries.rbegin()->version;
+    version = projected_last_update = entries.rbegin()->version;
   }
 
   boost::intrusive_ptr<RepGather> repop;
   boost::optional<std::function<void(void)> > on_complete;
   if (get_osdmap()->test_flag(CEPH_OSDMAP_REQUIRE_JEWEL)) {
     repop = new_repop(
+      version,
       std::move(manager),
       std::move(op),
       std::move(_on_complete));
