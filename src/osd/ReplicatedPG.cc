@@ -5496,6 +5496,9 @@ int ReplicatedPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(10) << " found existing watch " << w << " by " << entity << dendl;
 	  ctx->watch_connects.push_back(make_pair(w, true));
         } else if (op.watch.op == CEPH_OSD_WATCH_OP_PING) {
+	  /* Note: WATCH with PING doesn't cause may_write() to return true,
+	   * so if there is nothing else in the transaction, this is going
+	   * to run do_osd_op_effects, but not write out a log entry */
 	  if (!oi.watchers.count(make_pair(cookie, entity))) {
 	    result = -ENOTCONN;
 	    break;
@@ -12601,6 +12604,65 @@ void ReplicatedPG::agent_estimate_temp(const hobject_t& oid, int *temp)
       --last_n;
     }
   }
+}
+
+// Dup op detection
+
+bool ReplicatedPG::already_complete(eversion_t v)
+{
+  dout(20) << __func__ << ": " << v << dendl;
+  for (xlist<RepGather*>::iterator i = repop_queue.begin();
+       !i.end();
+       ++i) {
+    dout(20) << __func__ << ": " << **i << dendl;
+    // skip copy from temp object ops
+    if ((*i)->v == eversion_t()) {
+      dout(20) << __func__ << ": " << **i
+	       << " version is empty" << dendl;
+      continue;
+    }
+    if ((*i)->v > v) {
+      dout(20) << __func__ << ": " << **i
+	       << " (*i)->v past v" << dendl;
+      break;
+    }
+    if (!(*i)->all_committed) {
+      dout(20) << __func__ << ": " << **i
+	       << " not committed, returning false"
+	       << dendl;
+      return false;
+    }
+  }
+  dout(20) << __func__ << ": returning true" << dendl;
+  return true;
+}
+
+bool ReplicatedPG::already_ack(eversion_t v)
+{
+  dout(20) << __func__ << ": " << v << dendl;
+  for (xlist<RepGather*>::iterator i = repop_queue.begin();
+       !i.end();
+       ++i) {
+    // skip copy from temp object ops
+    if ((*i)->v == eversion_t()) {
+      dout(20) << __func__ << ": " << **i
+	       << " version is empty" << dendl;
+      continue;
+    }
+    if ((*i)->v > v) {
+      dout(20) << __func__ << ": " << **i
+	       << " (*i)->v past v" << dendl;
+      break;
+    }
+    if (!(*i)->all_applied) {
+      dout(20) << __func__ << ": " << **i
+	       << " not applied, returning false"
+	       << dendl;
+      return false;
+    }
+  }
+  dout(20) << __func__ << ": returning true" << dendl;
+  return true;
 }
 
 
