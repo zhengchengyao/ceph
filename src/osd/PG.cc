@@ -3378,6 +3378,7 @@ void PG::requeue_ops(list<OpRequestRef> &ls)
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
+  bool nodeep_scrub = false;
   assert(_lock.is_locked());
   if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
     return false;
@@ -3402,7 +3403,7 @@ bool PG::sched_scrub()
   //NODEEP_SCRUB so ignore time initiated deep-scrub
   if (osd->osd->get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
       pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB))
-    time_for_deep = false;
+    nodeep_scrub = true;
 
   if (!scrubber.must_scrub) {
     assert(!scrubber.must_deep_scrub);
@@ -3457,9 +3458,14 @@ bool PG::sched_scrub()
       ret = false;
     } else if (scrubber.reserved_peers.size() == acting.size()) {
       dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
-      if (time_for_deep) {
+      if (time_for_deep && !nodeep_scrub) {
 	dout(10) << "sched_scrub: scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
+      } else if (info.stats.stats.sum.num_deep_scrub_errors && !nodeep_scrub) {
+	dout(10) << "sched_scrub: deep errors upgraded scrub to deep-scrub" << dendl;
+	state_set(PG_STATE_DEEP_SCRUB);
+      } else if (info.stats.stats.sum.num_deep_scrub_errors && nodeep_scrub) {
+	dout(5) << "sched_scrub: warning: can't upgrade scrub with nodeep-scrub set" << dendl;
       }
       queue_scrub();
     } else {
