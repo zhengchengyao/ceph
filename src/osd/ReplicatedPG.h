@@ -652,6 +652,7 @@ public:
 
     bool all_applied;
     bool all_committed;
+    const bool applies_with_commit;
     
     utime_t   start;
     
@@ -664,8 +665,10 @@ public:
     list<std::function<void()>> on_success;
     list<std::function<void()>> on_finish;
     
-    RepGather(OpContext *c, ceph_tid_t rt,
-	      eversion_t lc) :
+    RepGather(
+      OpContext *c, ceph_tid_t rt,
+      eversion_t lc,
+      bool applies_with_commit) :
       hoid(c->obc->obs.oi.soid),
       op(c->op),
       queue_item(this),
@@ -673,6 +676,7 @@ public:
       rep_tid(rt), 
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
+      applies_with_commit(applies_with_commit),
       pg_local_last_complete(lc),
       lock_manager(std::move(c->lock_manager)),
       on_applied(std::move(c->on_applied)),
@@ -685,13 +689,15 @@ public:
       OpRequestRef &&o,
       boost::optional<std::function<void(void)> > &&on_complete,
       ceph_tid_t rt,
-      eversion_t lc) :
+      eversion_t lc,
+      bool applies_with_commit) :
       op(o),
       queue_item(this),
       nref(1),
       rep_tid(rt),
       rep_aborted(false), rep_done(false),
       all_applied(false), all_committed(false),
+      applies_with_commit(applies_with_commit),
       pg_local_last_complete(lc),
       lock_manager(std::move(manager)) {
       if (on_complete) {
@@ -829,6 +835,7 @@ protected:
     ObjectContextRef obc,
     ceph_tid_t rep_tid);
   boost::intrusive_ptr<RepGather> new_repop(
+    eversion_t version,
     ObcLockManager &&manager,
     OpRequestRef &&op,
     boost::optional<std::function<void(void)> > &&on_complete);
@@ -908,35 +915,9 @@ protected:
   void agent_choose_mode_restart() override;
 
   /// true if we can send an ondisk/commit for v
-  bool already_complete(eversion_t v) {
-    for (xlist<RepGather*>::iterator i = repop_queue.begin();
-	 !i.end();
-	 ++i) {
-      // skip copy from temp object ops
-      if ((*i)->v == eversion_t())
-	continue;
-      if ((*i)->v > v)
-        break;
-      if (!(*i)->all_committed)
-	return false;
-    }
-    return true;
-  }
+  bool already_complete(eversion_t v);
   /// true if we can send an ack for v
-  bool already_ack(eversion_t v) {
-    for (xlist<RepGather*>::iterator i = repop_queue.begin();
-	 !i.end();
-	 ++i) {
-      // skip copy from temp object ops
-      if ((*i)->v == eversion_t())
-	continue;
-      if ((*i)->v > v)
-        break;
-      if (!(*i)->all_applied)
-	return false;
-    }
-    return true;
-  }
+  bool already_ack(eversion_t v);
 
   // projected object info
   SharedLRU<hobject_t, ObjectContext, hobject_t::ComparatorWithDefault> object_contexts;
@@ -1097,15 +1078,11 @@ protected:
     const hobject_t& head, const hobject_t& coid,
     object_info_t *poi);
   void execute_ctx(OpContext *ctx);
-  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true,
-		  bool scrub_ok=false);
+  void finish_ctx(OpContext *ctx, int log_op_type, bool maintain_ssc=true);
   void reply_ctx(OpContext *ctx, int err);
   void reply_ctx(OpContext *ctx, int err, eversion_t v, version_t uv);
   void make_writeable(OpContext *ctx);
   void log_op_stats(OpContext *ctx);
-  void apply_ctx_scrub_stats(
-    OpContext *ctx,
-    bool scrub_ok=false); ///< true if we should skip scrub stat update
 
   void write_update_size_and_usage(object_stat_sum_t& stats, object_info_t& oi,
 				   interval_set<uint64_t>& modified, uint64_t offset,
