@@ -72,6 +72,7 @@ static void usage()
 static std::string devpath, poolname("rbd"), imgname, snapname;
 static bool readonly = false;
 static int nbds_max = 0;
+const static int max_part = 255;
 static bool exclusive = false;
 
 #ifdef CEPH_BIG_ENDIAN
@@ -446,14 +447,15 @@ static int open_device(const char* path, bool try_load_moudle = false)
 {
   int nbd = open(path, O_RDWR);
   if (nbd < 0 && try_load_moudle && access("/sys/module/nbd", F_OK) != 0) {
+    ostringstream param;
     int r;
     if (nbds_max) {
-      ostringstream param;
       param << "nbds_max=" << nbds_max;
-      r = module_load("nbd", param.str().c_str());
-    } else {
-      r = module_load("nbd", NULL);
     }
+    if (max_part) {
+        param << " max_part=" << max_part;
+    }
+    r = module_load("nbd", param.str().c_str());
     if (r < 0) {
       cerr << "rbd-nbd: failed to load nbd kernel module: " << cpp_strerror(-r) << std::endl;
       return r;
