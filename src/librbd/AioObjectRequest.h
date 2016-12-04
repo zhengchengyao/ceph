@@ -264,6 +264,10 @@ public:
       m_write_data(data), m_op_flags(op_flags) {
   }
 
+  bool is_empty() const {
+    return (m_write_data.length() == 0);
+  }
+
 protected:
   virtual void add_write_ops(librados::ObjectWriteOperation *wr);
 

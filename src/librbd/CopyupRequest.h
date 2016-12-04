@@ -84,6 +84,7 @@ private:
 
   bool send_object_map();
   bool send_copyup();
+  bool is_nop();
 };
 
 } // namespace librbd

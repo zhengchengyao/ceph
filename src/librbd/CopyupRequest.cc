@@ -204,6 +204,26 @@ void CopyupRequest::complete(int r)
   }
 }
 
+bool CopyupRequest::is_nop() {
+  bool noop = true;
+
+  // for CoW requests, it's not a no-operation if there's a non
+  // AioObjectWrite request or an AioObjectWrite request with a
+  // non-empty write payload.
+  for (const AioObjectRequest<> *req : m_pending_requests) {
+    const AioObjectWrite *wreq = dynamic_cast<const AioObjectWrite *>(req);
+    if (!wreq) {
+      return false;
+    }
+
+    if (!wreq->is_empty()) {
+      noop = false;
+    }
+  }
+
+  return (m_copyup_data.is_zero() && noop);
+}
+
 bool CopyupRequest::should_complete(int r)
 {
   CephContext *cct = m_ictx->cct;
@@ -217,6 +237,11 @@ bool CopyupRequest::should_complete(int r)
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
     remove_from_list();
     if (r >= 0 || r == -ENOENT) {
+      if (is_nop()) {
+        ldout(cct, 20) << __func__ << " " << this << " nop, skipping" << dendl;
+        return true;
+      }
+
       return send_object_map();
     }
     break;
